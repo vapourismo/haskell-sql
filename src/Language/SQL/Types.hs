@@ -28,21 +28,6 @@ data SQL v ts where
     Param  :: (t -> v)     -> SQL v ts -> SQL v (t : ts)
     Nil    :: SQL v '[]
 
--- -- | Prepend non-parametric 'SQL'.
--- prependSQL :: SQL v '[] -> SQL v ts -> SQL v ts
--- prependSQL segment rhs =
---     case segment of
---         Code   code  lhs -> Code   code  (prependSQL lhs rhs)
---         Static value lhs -> Static value (prependSQL lhs rhs)
---         Nil              -> rhs
-
--- prependSQL' :: SQL v '[t] -> SQL v ts -> SQL v (t : ts)
--- prependSQL' segment rhs =
---     case segment of
---         Code code lhs -> Code code (prependSQL' lhs rhs)
---         Static value lhs -> Static value (prependSQL' lhs rhs)
---         Param toValue lhs -> Param toValue (prependSQL lhs rhs)
-
 type family (++) ts us where
     (++) '[]      us = us
     (++) (t : ts) us = t : ts ++ us
