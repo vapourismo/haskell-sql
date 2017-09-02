@@ -18,7 +18,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import           Language.SQL.Types
 
-type P = ParsecT String () Q
+type Parser = ParsecT String () Q
 
 -- | Generate a 'B.ByteString' expression using the given 'String'.
 liftAsByteString :: String -> Q Exp
@@ -26,18 +26,18 @@ liftAsByteString str =
     [e| B.pack $(TH.lift (UTF8.encode str)) |]
 
 -- | Generate a 'Code' expression.
-toCodeExp :: String -> P Exp
+toCodeExp :: String -> Parser Exp
 toCodeExp code =
     lift [e| Code $(liftAsByteString code) |]
 
 -- | Parameter
-param :: P Exp
+param :: Parser Exp
 param = do
     char '?'
     lift [e| appendSql dynamicParam |]
 
 -- | Quote in SQL code
-quote :: Char -> P Exp
+quote :: Char -> Parser Exp
 quote delim = do
     char delim
     body <- many (escaped <|> pure <$> noneOf [delim])
@@ -50,7 +50,7 @@ quote delim = do
         escaped = (\ a b -> [a, b]) <$> char '\\' <*> anyChar
 
 -- | Static parameter
-static :: P Exp
+static :: Parser Exp
 static = do
     char '$'
 
@@ -65,7 +65,7 @@ static = do
             Just valName -> [e| appendSql (staticParam $(varE valName)) |]
 
 -- | Parser for SQL code
-sqlCode :: P Exp
+sqlCode :: Parser Exp
 sqlCode = do
     segments <- many $ choice [ param
                               , static
