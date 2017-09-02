@@ -8,7 +8,7 @@ library
   ghc-options:      -fno-warn-name-shadowing
   default-language: Haskell2010
   build-depends:    base >= 4.7 && < 5, template-haskell >= 2.11 && < 3,
-                    parsec, containers, bytestring, contravariant, tagged, mtl, utf8-string
+                    parsec, bytestring, tagged, mtl, utf8-string
   exposed-modules:  Language.SQL
                     Language.SQL.Types
                     Language.SQL.Builder
