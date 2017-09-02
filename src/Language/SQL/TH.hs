@@ -7,14 +7,15 @@ module Language.SQL.TH (
 import           Control.Applicative
 import           Control.Monad.Trans
 
-import qualified Codec.Binary.UTF8.String   as UTF8
-import qualified Data.ByteString            as B
+import qualified Codec.Binary.UTF8.String    as UTF8
+import qualified Data.ByteString             as B
 import           Data.List
-import           Text.Parsec                hiding (many, (<|>))
+import           Text.Parsec                 hiding (many, (<|>))
 
+import           Language.Haskell.Meta.Parse
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Quote
-import qualified Language.Haskell.TH.Syntax as TH
+import qualified Language.Haskell.TH.Syntax  as TH
 
 import           Language.SQL.Types
 
@@ -36,18 +37,38 @@ param = do
     char '?'
     lift [e| appendSql dynamicParam |]
 
--- | Quote in SQL code
-quote :: Char -> Parser Exp
-quote delim = do
+-- | Quotation
+quotation :: Char -> Parser String
+quotation delim = do
     char delim
     body <- many (escaped <|> pure <$> noneOf [delim])
     char delim
-
-    let code = delim : concat body ++ [delim]
-    toCodeExp code
-
+    pure (delim : concat body ++ [delim])
     where
         escaped = (\ a b -> [a, b]) <$> char '\\' <*> anyChar
+
+-- | Something in parentheses
+inParentheses :: Parser String
+inParentheses = do
+    char '('
+    body <- many $ choice [ inParentheses
+                          , quotation '"'
+                          , quotation '\''
+                          , some (noneOf "'\"()") ]
+    char ')'
+    pure ('(' : concat body ++ ")")
+
+-- | Inlined 'SQL'
+inline :: Parser Exp
+inline = do
+    char '$'
+    body <- inParentheses
+    either fail (\ exp -> lift [e| appendSql $(pure exp) |]) (parseExp body)
+
+-- | Textual quote
+quote :: Char -> Parser Exp
+quote delim =
+    toCodeExp =<< quotation delim
 
 -- | Static parameter
 static :: Parser Exp
@@ -68,6 +89,7 @@ static = do
 sqlCode :: Parser Exp
 sqlCode = do
     segments <- many $ choice [ param
+                              , inline
                               , static
                               , quote '"'
                               , quote '\''
