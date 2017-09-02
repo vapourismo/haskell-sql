@@ -87,11 +87,11 @@ sqlCode :: Parser Exp
 sqlCode =
     foldr AppE (VarE 'Nil)
     <$> many (choice [ param
-                        , inline
-                        , static
-                        , quote '"'
-                        , quote '\''
-                        , toCodeExp =<< some (noneOf "\"'?$") ])
+                     , inline
+                     , static
+                     , quote '"'
+                     , quote '\''
+                     , toCodeExp =<< some (noneOf "\"'?$") ])
 
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
@@ -110,7 +110,7 @@ parseSqlCode code = do
                 ++ "): "
                 ++ intercalate ", " (tail (lines (show parseError)))
 
-    runParserT sqlCode () "quasi-quote" code >>= either reportParseError pure
+    runParserT (sqlCode <* eof) () "quasi-quote" code >>= either reportParseError pure
 
 -- | Basic SQL quasi-quoter
 sql :: QuasiQuoter
