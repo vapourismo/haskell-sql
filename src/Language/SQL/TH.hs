@@ -9,6 +9,7 @@ import           Control.Monad.Trans
 
 import qualified Codec.Binary.UTF8.String   as UTF8
 import qualified Data.ByteString            as B
+import           Data.List
 import           Text.Parsec                hiding (many, (<|>))
 
 import           Language.Haskell.TH
@@ -78,8 +79,18 @@ sqlCode = do
 
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
-parseSqlCode code =
-    runParserT sqlCode () "quasi-quote" code >>= either (fail . show) pure
+parseSqlCode code = do
+    Loc _ _ _ (lineStart, charStart) _ <- location
+    let reportParseError parseError = do
+            let sourcePos = errorPos parseError
+                lineReal  = lineStart + sourceLine sourcePos - 1
+                charReal  = charStart + sourceColumn sourcePos - 1
+
+            fail $
+                "(line " ++ show lineReal ++ ", column " ++ show charReal ++ "): "
+                ++ intercalate ", " (tail (lines (show parseError)))
+
+    runParserT sqlCode () "quasi-quote" code >>= either reportParseError pure
 
 -- | Basic SQL quasi-quoter
 sql :: QuasiQuoter
