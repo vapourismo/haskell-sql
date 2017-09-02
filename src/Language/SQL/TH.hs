@@ -68,16 +68,13 @@ inline = do
 -- | Textual quote
 quote :: Char -> Parser Exp
 quote delim =
-    toCodeExp =<< quotation delim
+    quotation delim >>= toCodeExp
 
 -- | Static parameter
 static :: Parser Exp
 static = do
     char '$'
-
-    nameHead <- letter <|> char '_'
-    nameBody <- many (alphaNum <|> char '_')
-    let strName = nameHead : nameBody
+    strName <- (:) <$> (letter <|> char '_') <*> many (alphaNum <|> char '_')
 
     lift $ do
         mbName <- lookupValueName strName
@@ -87,16 +84,14 @@ static = do
 
 -- | Parser for SQL code
 sqlCode :: Parser Exp
-sqlCode = do
-    segments <- many $ choice [ param
-                              , inline
-                              , static
-                              , quote '"'
-                              , quote '\''
-                              , toCodeExp =<< some (noneOf "\"'?$") ]
-    lift $ do
-        nil <- [e| Nil |]
-        pure (foldr AppE nil segments)
+sqlCode =
+    foldr AppE (VarE 'Nil)
+    <$> many (choice [ param
+                        , inline
+                        , static
+                        , quote '"'
+                        , quote '\''
+                        , toCodeExp =<< some (noneOf "\"'?$") ])
 
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
@@ -108,7 +103,11 @@ parseSqlCode code = do
                 charReal  = charStart + sourceColumn sourcePos - 1
 
             fail $
-                "(line " ++ show lineReal ++ ", column " ++ show charReal ++ "): "
+                "(line "
+                ++ show lineReal
+                ++ ", column "
+                ++ show charReal
+                ++ "): "
                 ++ intercalate ", " (tail (lines (show parseError)))
 
     runParserT sqlCode () "quasi-quote" code >>= either reportParseError pure
