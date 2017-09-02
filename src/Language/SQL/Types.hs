@@ -19,14 +19,27 @@ module Language.SQL.Types (
     WithValues (..)
 ) where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString      as B
+import qualified Data.ByteString.UTF8 as UTF8
+import           Data.String
 
 -- | Basic SQL syntax tree
 data SQL v ts where
     Code   :: B.ByteString -> SQL v ts -> SQL v ts
     Static :: v            -> SQL v ts -> SQL v ts
     Param  :: (t -> v)     -> SQL v ts -> SQL v (t : ts)
-    Nil    :: SQL v '[]
+    Nil    ::                             SQL v '[]
+
+instance IsString (SQL v ts -> SQL v ts) where
+    fromString str = Code (UTF8.fromString str)
+
+instance IsString (SQL v '[]) where
+    fromString str = Code (UTF8.fromString str) Nil
+
+instance Monoid (SQL v '[]) where
+    mempty = Code B.empty Nil
+
+    mappend = appendSql
 
 type family (++) ts us where
     (++) '[]      us = us
