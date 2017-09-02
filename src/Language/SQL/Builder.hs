@@ -6,25 +6,41 @@
 {-# LANGUAGE TypeOperators         #-}
 
 module Language.SQL.Builder (
+    Placeholder (..),
+    Param (..),
+
     buildCode,
     buildCodeSegments,
-    buildParams,
+    buildValues,
     buildQuery,
-    buildPrepQuery,
-
-    ParamsFunc,
-    WithValues (..),
-    IsolateParams (..)
+    buildPrepQuery
 ) where
 
 import qualified Data.ByteString    as B
 import           Data.Tagged
 
 import           Language.SQL.Types
-import           Language.SQL.Value
+
+-- | @p@ can be used as a placeholder.
+class Placeholder p where
+    -- | A function that produces placeholder code for a given index. Indices start at 0.
+    placeholderCode :: Tagged p (Word -> B.ByteString)
+
+-- | @a@ can be used as parameter type @p@.
+class Param p a where
+    -- | Generate 'SQL' for a static param.
+    staticParam :: a -> SQL p '[]
+    staticParam a = Static (toValue a) Nil
+
+    -- | Generate 'SQL' for a dynamic param.
+    dynamicParam :: SQL p '[a]
+    dynamicParam = Param toValue Nil
+
+    -- | Convert to value.
+    toValue :: a -> p
 
 -- | Gather the code segments from the SQL syntax tree.
-buildCodeSegments :: (Word -> B.ByteString) -> Word -> SQL v ts -> [B.ByteString]
+buildCodeSegments :: (Word -> B.ByteString) -> Word -> SQL p ts -> [B.ByteString]
 buildCodeSegments placeholder index segment =
     case segment of
         Code   code rest -> code              : buildCodeSegments placeholder index       rest
@@ -33,23 +49,23 @@ buildCodeSegments placeholder index segment =
         Nil              -> []
 
 -- | Gather the code from the SQL syntax tree.
-buildCode :: forall v ts. Value v => SQL v ts -> B.ByteString
+buildCode :: forall p ts. Placeholder p => SQL p ts -> B.ByteString
 buildCode segments =
-    B.concat (buildCodeSegments (untag (placeholderCode @v)) 0 segments)
+    B.concat (buildCodeSegments (untag (placeholderCode @p)) 0 segments)
 
--- | @buildParams sql@ produces a function which collects all the necessary parameters for the
+-- | @buildValues sql@ produces a function which collects all the necessary parameters for the
 -- query described in @sql@.
-buildParams :: WithValues ts => SQL v ts -> ParamsFunc ts [v]
-buildParams =
+buildValues :: WithValues ts => SQL p ts -> Function ts [p]
+buildValues =
     withValues id
 
 -- | @buildQuery sql@ produces a function which collects all the parameters need by @sql@ in order
 -- instantiate a 'Query'.
-buildQuery :: (Value v, WithValues ts) => SQL v ts -> ParamsFunc ts (Query v)
+buildQuery :: (Placeholder p, WithValues ts) => SQL p ts -> Function ts (Query p)
 buildQuery segment =
     withValues (Query (buildCode segment)) segment
 
 -- | Build a 'PrepQuery' instance using the given query.
-buildPrepQuery :: (Value v, IsolateParams ts) => SQL v ts -> PrepQuery v ts
+buildPrepQuery :: (Placeholder p, IsolateParams ts) => SQL p ts -> PrepQuery p ts
 buildPrepQuery segment =
     PrepQuery (buildCode segment) (isolateParams segment)

@@ -17,7 +17,6 @@ import           Language.Haskell.TH.Quote
 import qualified Language.Haskell.TH.Syntax as TH
 
 import           Language.SQL.Types
-import           Language.SQL.Value
 
 type P = ParsecT String () Q
 

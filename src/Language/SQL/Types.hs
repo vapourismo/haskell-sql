@@ -1,11 +1,9 @@
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE StandaloneDeriving     #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE GADTs              #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE TypeOperators      #-}
 
 module Language.SQL.Types (
     SQL (..),
@@ -14,7 +12,7 @@ module Language.SQL.Types (
     PrepQuery (..),
 
     AppendSQL (..),
-    ParamsFunc,
+    Function,
     IsolateParams (..),
     WithValues (..)
 ) where
@@ -24,19 +22,19 @@ import qualified Data.ByteString.UTF8 as UTF8
 import           Data.String
 
 -- | Basic SQL syntax tree
-data SQL v ts where
-    Code   :: B.ByteString -> SQL v ts -> SQL v ts
-    Static :: v            -> SQL v ts -> SQL v ts
-    Param  :: (t -> v)     -> SQL v ts -> SQL v (t : ts)
-    Nil    ::                             SQL v '[]
+data SQL p ts where
+    Code   :: B.ByteString -> SQL p ts -> SQL p ts
+    Static :: p            -> SQL p ts -> SQL p ts
+    Param  :: (t -> p)     -> SQL p ts -> SQL p (t : ts)
+    Nil    ::                             SQL p '[]
 
-instance IsString (SQL v ts -> SQL v ts) where
+instance IsString (SQL p ts -> SQL p ts) where
     fromString str = Code (UTF8.fromString str)
 
-instance IsString (SQL v '[]) where
+instance IsString (SQL p '[]) where
     fromString str = Code (UTF8.fromString str) Nil
 
-instance Monoid (SQL v '[]) where
+instance Monoid (SQL p '[]) where
     mempty = Code B.empty Nil
 
     mappend = appendSql
@@ -46,7 +44,8 @@ type family (++) ts us where
     (++) (t : ts) us = t : ts ++ us
 
 class AppendSQL ts where
-    appendSql :: SQL v ts -> SQL v us -> SQL v (ts ++ us)
+    -- | Append two 'SQL' instances.
+    appendSql :: SQL p ts -> SQL p us -> SQL p (ts ++ us)
 
 instance AppendSQL '[] where
     appendSql segment rhs =
@@ -64,7 +63,7 @@ instance AppendSQL ts => AppendSQL (t : ts) where
 
 class IsolateParams ts where
     -- | Isolate the parameters from the query.
-    isolateParams :: SQL v ts -> SQL v ts
+    isolateParams :: SQL p ts -> SQL p ts
 
 instance IsolateParams '[] where
     isolateParams segment =
@@ -80,15 +79,14 @@ instance IsolateParams (t : ts) where
             Static value   rest -> Static value   rest
             Param  toValue rest -> Param  toValue rest
 
--- | A 'ParamFunc' collects all parameters necessary to produce a set of values that need to go with
--- a query.
-type family ParamsFunc ts r where
-    ParamsFunc '[]      r = r
-    ParamsFunc (t : ts) r = t -> ParamsFunc ts r
+-- | @Function '[p1, p2, ... pn] r@ produces a function @p1 -> p2 -> ... pn -> r@.
+type family Function ts r where
+    Function '[]      r = r
+    Function (t : ts) r = t -> Function ts r
 
 class WithValues ts where
     -- | Do something with the values that need to be passed alongside a given query.
-    withValues :: ([v] -> r) -> SQL v ts -> ParamsFunc ts r
+    withValues :: ([p] -> r) -> SQL p ts -> Function ts r
 
 instance WithValues '[] where
     withValues ret segment =
@@ -105,15 +103,15 @@ instance WithValues ts => WithValues (t : ts) where
             Code   _       rest -> withValues ret                       rest param
 
 -- | Query
-data Query v =
+data Query p =
     Query { queryCode   :: B.ByteString
-          , queryParams :: [v] }
+          , queryParams :: [p] }
 
-deriving instance (Show v) => Show (Query v)
-deriving instance (Eq v)   => Eq (Query v)
-deriving instance (Ord v)  => Ord (Query v)
+deriving instance (Show p) => Show (Query p)
+deriving instance (Eq p)   => Eq (Query p)
+deriving instance (Ord p)  => Ord (Query p)
 
 -- | Preparable query
-data PrepQuery v ts =
+data PrepQuery p ts =
     PrepQuery { prepQueryCode   :: B.ByteString
-              , prepQueryParams :: SQL v ts }
+              , prepQueryParams :: SQL p ts }

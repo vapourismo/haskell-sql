@@ -12,5 +12,4 @@ library
   exposed-modules:  Language.SQL
                     Language.SQL.Types
                     Language.SQL.Builder
-                    Language.SQL.Value
                     Language.SQL.TH
