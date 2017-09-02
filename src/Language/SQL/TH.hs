@@ -85,7 +85,7 @@ static = do
 -- | Parser for SQL code
 sqlCode :: Parser Exp
 sqlCode =
-    foldr AppE (VarE 'Nil)
+    foldr AppE (ConE 'Nil)
     <$> many (choice [ param
                      , inline
                      , static
