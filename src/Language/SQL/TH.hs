@@ -9,6 +9,7 @@ import           Control.Monad.Trans
 
 import qualified Codec.Binary.UTF8.String    as UTF8
 import qualified Data.ByteString             as B
+import           Data.Char
 import           Data.List
 import           Text.Parsec                 hiding (many, (<|>))
 
@@ -36,7 +37,7 @@ toCodeExp code =
 param :: Parser Exp
 param = do
     char '?'
-    lift [e| append dynamicParam |]
+    lift [e| append (Nest dynamicParam) |]
 
 -- | Quotation
 quotation :: Char -> Parser String
@@ -88,7 +89,7 @@ sqlCode :: Parser Exp
 sqlCode =
     foldr AppE (ConE 'Nil)
     <$> many (choice [ param
-                     , inline
+                     , try inline
                      , static
                      , quote '"'
                      , quote '\''
@@ -96,7 +97,9 @@ sqlCode =
 
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
-parseSqlCode code = do
+parseSqlCode inputCode = do
+    let code = dropWhileEnd isSpace (dropWhile isSpace inputCode)
+
     Loc _ _ _ (lineStart, charStart) _ <- location
     let reportParseError parseError = do
             let sourcePos = errorPos parseError

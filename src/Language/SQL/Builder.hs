@@ -30,10 +30,10 @@ import           Data.String
 
 -- | Query builder
 data Builder ts p where
-    Code  :: B.ByteString         -> Builder ts p        -> Builder ts       p
-    Param :: p                    -> Builder ts p        -> Builder ts       p
-    Nest  ::                         Builder ts (t -> p) -> Builder (t : ts) p
-    Nil   ::                                                Builder '[]      p
+    Code  :: B.ByteString -> Builder ts p        -> Builder ts       p
+    Param :: p            -> Builder ts p        -> Builder ts       p
+    Nest  ::                 Builder ts (t -> p) -> Builder (t : ts) p
+    Nil   ::                                        Builder '[]      p
 
 -- | Unnest 'Builder'.
 unnest :: BuilderAux ts => Builder (t : ts) p -> Builder ts (t -> p)

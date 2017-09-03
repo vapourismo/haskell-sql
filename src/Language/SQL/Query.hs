@@ -31,11 +31,11 @@ data PrepQuery ts p =
 class Param p a where
     -- | Generate 'Builder' for a static parameter.
     staticParam :: a -> Builder '[] p
-    staticParam a = ($ a) <$> unnest dynamicParam
+    staticParam a = ($ a) <$> dynamicParam
 
     -- | Generate 'Builder' for a dynamic parameter.
-    dynamicParam :: Builder '[a] p
-    dynamicParam = Nest (Param toValue Nil)
+    dynamicParam :: Builder '[] (a -> p)
+    dynamicParam = Param toValue Nil
 
     -- | Convert to value.
     toValue :: a -> p
