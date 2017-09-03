@@ -23,7 +23,7 @@ deriving instance (Eq p)   => Eq (Query p)
 deriving instance (Ord p)  => Ord (Query p)
 
 -- | Preparable query
-data PrepQuery p ts =
+data PrepQuery ts p =
     PrepQuery { prepQueryCode   :: B.ByteString
               , prepQueryParams :: Builder ts p }
 
