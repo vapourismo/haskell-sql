@@ -22,19 +22,19 @@ import qualified Data.ByteString.UTF8 as UTF8
 import           Data.String
 
 -- | Basic query builder
-data Builder p ts where
-    Code   :: B.ByteString -> Builder p ts -> Builder p ts
-    Static :: p            -> Builder p ts -> Builder p ts
-    Param  :: (t -> p)     -> Builder p ts -> Builder p (t : ts)
-    Nil    ::                             Builder p '[]
+data Builder ts p where
+    Code   :: B.ByteString -> Builder ts p -> Builder ts       p
+    Static :: p            -> Builder ts p -> Builder ts       p
+    Param  :: (t -> p)     -> Builder ts p -> Builder (t : ts) p
+    Nil    ::                                 Builder '[]      p
 
-instance IsString (Builder p ts -> Builder p ts) where
+instance IsString (Builder ts p -> Builder ts p) where
     fromString str = Code (UTF8.fromString str)
 
-instance IsString (Builder p '[]) where
+instance IsString (Builder '[] p) where
     fromString str = Code (UTF8.fromString str) Nil
 
-instance Monoid (Builder p '[]) where
+instance Monoid (Builder '[] p) where
     mempty = Code B.empty Nil
 
     mappend = appendSql
@@ -45,7 +45,7 @@ type family (++) ts us where
 
 class AppendSQL ts where
     -- | Append two 'Builder' instances.
-    appendSql :: Builder p ts -> Builder p us -> Builder p (ts ++ us)
+    appendSql :: Builder ts p -> Builder us p -> Builder (ts ++ us) p
 
 instance AppendSQL '[] where
     appendSql segment rhs =
@@ -63,7 +63,7 @@ instance AppendSQL ts => AppendSQL (t : ts) where
 
 class IsolateParams ts where
     -- | Isolate the parameters from the query.
-    isolateParams :: Builder p ts -> Builder p ts
+    isolateParams :: Builder ts p -> Builder ts p
 
 instance IsolateParams '[] where
     isolateParams segment =
@@ -86,7 +86,7 @@ type family Function ts r where
 
 class WithValues ts where
     -- | Do something with the values that need to be passed alongside a given query.
-    withValues :: ([p] -> r) -> Builder p ts -> Function ts r
+    withValues :: ([p] -> r) -> Builder ts p -> Function ts r
 
 instance WithValues '[] where
     withValues ret segment =
@@ -114,4 +114,4 @@ deriving instance (Ord p)  => Ord (Query p)
 -- | Preparable query
 data PrepQuery p ts =
     PrepQuery { prepQueryCode   :: B.ByteString
-              , prepQueryParams :: Builder p ts }
+              , prepQueryParams :: Builder ts p }

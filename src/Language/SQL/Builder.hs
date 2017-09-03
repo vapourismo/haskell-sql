@@ -29,18 +29,18 @@ class Placeholder p where
 -- | @a@ can be used as parameter type @p@.
 class Param p a where
     -- | Generate 'Builder' for a static parameter.
-    staticParam :: a -> Builder p '[]
+    staticParam :: a -> Builder '[] p
     staticParam a = Static (toValue a) Nil
 
     -- | Generate 'Builder' for a dynamic parameter.
-    dynamicParam :: Builder p '[a]
+    dynamicParam :: Builder '[a] p
     dynamicParam = Param toValue Nil
 
     -- | Convert to value.
     toValue :: a -> p
 
 -- | Gather the code segments from the Builder syntax tree.
-buildCodeSegments :: (Word -> B.ByteString) -> Word -> Builder p ts -> [B.ByteString]
+buildCodeSegments :: (Word -> B.ByteString) -> Word -> Builder ts p -> [B.ByteString]
 buildCodeSegments placeholder index segment =
     case segment of
         Code   code rest -> code              : buildCodeSegments placeholder index       rest
@@ -49,23 +49,23 @@ buildCodeSegments placeholder index segment =
         Nil              -> []
 
 -- | Gather the code from the Builder syntax tree.
-buildCode :: forall p ts. Placeholder p => Builder p ts -> B.ByteString
+buildCode :: forall p ts. Placeholder p => Builder ts p -> B.ByteString
 buildCode segments =
     B.concat (buildCodeSegments (untag (placeholderCode @p)) 0 segments)
 
 -- | @buildValues sql@ produces a function which collects all the necessary parameters for the
 -- query described in @sql@.
-buildValues :: WithValues ts => Builder p ts -> Function ts [p]
+buildValues :: WithValues ts => Builder ts p -> Function ts [p]
 buildValues =
     withValues id
 
 -- | @buildQuery sql@ produces a function which collects all the parameters need by @sql@ in order
 -- instantiate a 'Query'.
-buildQuery :: (Placeholder p, WithValues ts) => Builder p ts -> Function ts (Query p)
+buildQuery :: (Placeholder p, WithValues ts) => Builder ts p -> Function ts (Query p)
 buildQuery segment =
     withValues (Query (buildCode segment)) segment
 
 -- | Build a 'PrepQuery' instance using the given query.
-buildPrepQuery :: (Placeholder p, IsolateParams ts) => Builder p ts -> PrepQuery p ts
+buildPrepQuery :: (Placeholder p, IsolateParams ts) => Builder ts p -> PrepQuery p ts
 buildPrepQuery segment =
     PrepQuery (buildCode segment) (isolateParams segment)
