@@ -36,7 +36,7 @@ toCodeExp code =
 param :: Parser Exp
 param = do
     char '?'
-    lift [e| appendBuilder dynamicParam |]
+    lift [e| append dynamicParam |]
 
 -- | Quotation
 quotation :: Char -> Parser String
@@ -64,7 +64,7 @@ inline :: Parser Exp
 inline = do
     char '$'
     body <- inParentheses
-    either fail (\ exp -> lift [e| appendBuilder $(pure exp) |]) (parseExp body)
+    either fail (\ exp -> lift [e| append $(pure exp) |]) (parseExp body)
 
 -- | Textual quote
 quote :: Char -> Parser Exp
@@ -81,7 +81,7 @@ static = do
         mbName <- lookupValueName strName
         case mbName of
             Nothing      -> fail ("Name " ++ show strName ++ " does not refer to a value")
-            Just valName -> [e| appendBuilder (staticParam $(varE valName)) |]
+            Just valName -> [e| append (staticParam $(varE valName)) |]
 
 -- | Parser for SQL code
 sqlCode :: Parser Exp
