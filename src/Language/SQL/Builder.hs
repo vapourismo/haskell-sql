@@ -55,15 +55,15 @@ buildCode segments =
 
 -- | @buildValues sql@ produces a function which collects all the necessary parameters for the
 -- query described in @sql@.
-buildValues :: WithValues ts => Builder ts p -> Function ts [p]
+buildValues :: WithParams ts => Builder ts p -> Function ts [p]
 buildValues =
-    withValues id
+    withParams id
 
 -- | @buildQuery sql@ produces a function which collects all the parameters need by @sql@ in order
 -- instantiate a 'Query'.
-buildQuery :: (Placeholder p, WithValues ts) => Builder ts p -> Function ts (Query p)
+buildQuery :: (Placeholder p, WithParams ts) => Builder ts p -> Function ts (Query p)
 buildQuery segment =
-    withValues (Query (buildCode segment)) segment
+    withParams (Query (buildCode segment)) segment
 
 -- | Build a 'PrepQuery' instance using the given query.
 buildPrepQuery :: (Placeholder p, IsolateParams ts) => Builder ts p -> PrepQuery p ts

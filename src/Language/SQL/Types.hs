@@ -11,17 +11,17 @@ module Language.SQL.Types (
     Query (..),
     PrepQuery (..),
 
-    AppendSQL (..),
+    AppendBuilder (..),
     Function,
     IsolateParams (..),
-    WithValues (..)
+    WithParams (..)
 ) where
 
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.UTF8 as UTF8
 import           Data.String
 
--- | Basic query builder
+-- | Query builder
 data Builder ts p where
     Code   :: B.ByteString -> Builder ts p -> Builder ts       p
     Static :: p            -> Builder ts p -> Builder ts       p
@@ -37,29 +37,29 @@ instance IsString (Builder '[] p) where
 instance Monoid (Builder '[] p) where
     mempty = Code B.empty Nil
 
-    mappend = appendSql
+    mappend = appendBuilder
 
 type family (++) ts us where
     (++) '[]      us = us
     (++) (t : ts) us = t : ts ++ us
 
-class AppendSQL ts where
+class AppendBuilder ts where
     -- | Append two 'Builder' instances.
-    appendSql :: Builder ts p -> Builder us p -> Builder (ts ++ us) p
+    appendBuilder :: Builder ts p -> Builder us p -> Builder (ts ++ us) p
 
-instance AppendSQL '[] where
-    appendSql segment rhs =
+instance AppendBuilder '[] where
+    appendBuilder segment rhs =
         case segment of
-            Code   code  lhs -> Code   code  (appendSql lhs rhs)
-            Static value lhs -> Static value (appendSql lhs rhs)
+            Code   code  lhs -> Code   code  (appendBuilder lhs rhs)
+            Static value lhs -> Static value (appendBuilder lhs rhs)
             Nil              -> rhs
 
-instance AppendSQL ts => AppendSQL (t : ts) where
-    appendSql segment rhs =
+instance AppendBuilder ts => AppendBuilder (t : ts) where
+    appendBuilder segment rhs =
         case segment of
-            Code   code    lhs -> Code   code    (appendSql lhs rhs)
-            Static value   lhs -> Static value   (appendSql lhs rhs)
-            Param  toValue lhs -> Param  toValue (appendSql lhs rhs)
+            Code   code    lhs -> Code   code    (appendBuilder lhs rhs)
+            Static value   lhs -> Static value   (appendBuilder lhs rhs)
+            Param  toValue lhs -> Param  toValue (appendBuilder lhs rhs)
 
 class IsolateParams ts where
     -- | Isolate the parameters from the query.
@@ -79,28 +79,28 @@ instance IsolateParams (t : ts) where
             Static value   rest -> Static value   rest
             Param  toValue rest -> Param  toValue rest
 
--- | @Function '[p1, p2, ... pn] r@ produces a function @p1 -> p2 -> ... pn -> r@.
+-- | @Function '[p1, p2, ... pn] r@ constructs a type signature @p1 -> p2 -> ... pn -> r@.
 type family Function ts r where
     Function '[]      r = r
     Function (t : ts) r = t -> Function ts r
 
-class WithValues ts where
+class WithParams ts where
     -- | Do something with the values that need to be passed alongside a given query.
-    withValues :: ([p] -> r) -> Builder ts p -> Function ts r
+    withParams :: ([p] -> r) -> Builder ts p -> Function ts r
 
-instance WithValues '[] where
-    withValues ret segment =
+instance WithParams '[] where
+    withParams ret segment =
         case segment of
-            Static value rest -> withValues (ret . (value :)) rest
-            Code   _     rest -> withValues ret               rest
+            Static value rest -> withParams (ret . (value :)) rest
+            Code   _     rest -> withParams ret               rest
             Nil               -> ret []
 
-instance WithValues ts => WithValues (t : ts) where
-    withValues ret segment param =
+instance WithParams ts => WithParams (t : ts) where
+    withParams ret segment param =
         case segment of
-            Static value   rest -> withValues (ret . (value         :)) rest param
-            Param  toValue rest -> withValues (ret . (toValue param :)) rest
-            Code   _       rest -> withValues ret                       rest param
+            Static value   rest -> withParams (ret . (value         :)) rest param
+            Param  toValue rest -> withParams (ret . (toValue param :)) rest
+            Code   _       rest -> withParams ret                       rest param
 
 -- | Query
 data Query p =
