@@ -17,7 +17,7 @@ import           Language.Haskell.TH
 import           Language.Haskell.TH.Quote
 import qualified Language.Haskell.TH.Syntax  as TH
 
-import           Language.SQL.Types
+import           Language.SQL.Builder
 
 type Parser = ParsecT String () Q
 
@@ -35,7 +35,7 @@ toCodeExp code =
 param :: Parser Exp
 param = do
     char '?'
-    lift [e| appendSql dynamicParam |]
+    lift [e| appendBuilder dynamicParam |]
 
 -- | Quotation
 quotation :: Char -> Parser String
@@ -63,7 +63,7 @@ inline :: Parser Exp
 inline = do
     char '$'
     body <- inParentheses
-    either fail (\ exp -> lift [e| appendSql $(pure exp) |]) (parseExp body)
+    either fail (\ exp -> lift [e| appendBuilder $(pure exp) |]) (parseExp body)
 
 -- | Textual quote
 quote :: Char -> Parser Exp
@@ -80,7 +80,7 @@ static = do
         mbName <- lookupValueName strName
         case mbName of
             Nothing      -> fail ("Name " ++ show strName ++ " does not refer to a value")
-            Just valName -> [e| appendSql (staticParam $(varE valName)) |]
+            Just valName -> [e| appendBuilder (staticParam $(varE valName)) |]
 
 -- | Parser for SQL code
 sqlCode :: Parser Exp
