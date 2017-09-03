@@ -30,7 +30,6 @@ import           Data.String
 data Builder ts p where
     Code    :: B.ByteString         -> Builder ts p        -> Builder ts       p
     Static  :: p                    -> Builder ts p        -> Builder ts       p
-    Dynamic :: (t -> p)             -> Builder ts p        -> Builder (t : ts) p
     Nest    ::                         Builder ts (t -> p) -> Builder (t : ts) p
     Nil     ::                                                Builder '[]      p
 
@@ -40,7 +39,6 @@ unnest segment =
     case segment of
         Code    code    rest -> Code   code          (unnest rest)
         Static  param   rest -> Static (const param) (unnest rest)
-        Dynamic toParam rest -> Static toParam       (const <$> rest)
         Nest            rest -> rest
 
 -- | Append two type lists.
@@ -110,35 +108,30 @@ instance BuilderAux ts => BuilderAux (t : ts) where
         case segment of
             Code    code  rest -> UTF8.toString code                 : showBuilder rest
             Static  param rest -> ("<static: " ++ show param ++ ">") : showBuilder rest
-            Dynamic _     rest -> "<dynamic>"                        : showBuilder rest
             Nest          rest -> showBuilder (DerivedStatic <$ rest)
 
     fmapBuilder f segment =
         case segment of
             Code    code    rest -> Code    code          (f      <$> rest)
             Static  param   rest -> Static  (f param)     (f      <$> rest)
-            Dynamic toParam rest -> Dynamic (f . toParam) (f      <$> rest)
             Nest            rest -> Nest                  (fmap f <$> rest)
 
     append segment rhs =
         case segment of
             Code    code    lhs -> Code    code    (append lhs rhs)
             Static  value   lhs -> Static  value   (append lhs rhs)
-            Dynamic toValue lhs -> Dynamic toValue (append lhs rhs)
             Nest            lhs -> Nest            (append lhs (const <$> rhs))
 
     isolateParams segment =
         case segment of
             Code    _       rest -> isolateParams rest
             Static  value   rest -> Static  value   (isolateParams rest)
-            Dynamic toValue rest -> Dynamic toValue (isolateParams rest)
             Nest            rest -> Nest (isolateParams rest)
 
     withParams ret segment param =
         case segment of
             Code    _       rest -> withParams ret                       rest param
             Static  value   rest -> withParams (ret . (value         :)) rest param
-            Dynamic toValue rest -> withParams (ret . (toValue param :)) rest
             Nest            rest -> withParams ret                       (($ param) <$> rest)
 
 instance BuilderAux ts => Functor (Builder ts) where
@@ -164,7 +157,7 @@ buildCodeSegments placeholder index segment =
     case segment of
         Code    code rest -> code              : buildCodeSegments placeholder index       rest
         Static  _    rest -> placeholder index : buildCodeSegments placeholder (index + 1) rest
-        Dynamic _    rest -> placeholder index : buildCodeSegments placeholder (index + 1) rest
+        Nest rest         -> buildCodeSegments placeholder index rest
         Nil               -> []
 
 -- | Gather the code from the Builder syntax tree.
