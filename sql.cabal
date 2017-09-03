@@ -10,6 +10,6 @@ library
   build-depends:    base >= 4.7 && < 5, template-haskell >= 2.11 && < 3,
                     parsec, bytestring, tagged, mtl, utf8-string, haskell-src-meta
   exposed-modules:  Language.SQL
-                    Language.SQL.Types
                     Language.SQL.Builder
+                    Language.SQL.Query
                     Language.SQL.TH

@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 
-module Language.SQL.Types (
+module Language.SQL.Query (
     Query (..),
     PrepQuery (..),
 

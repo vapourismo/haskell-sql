@@ -18,7 +18,7 @@ import           Language.Haskell.TH.Quote
 import qualified Language.Haskell.TH.Syntax  as TH
 
 import           Language.SQL.Builder
-import           Language.SQL.Types
+import           Language.SQL.Query
 
 type Parser = ParsecT String () Q
 
