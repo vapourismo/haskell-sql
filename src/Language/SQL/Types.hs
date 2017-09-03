@@ -35,7 +35,7 @@ class Param p a where
 
     -- | Generate 'Builder' for a dynamic parameter.
     dynamicParam :: Builder '[a] p
-    dynamicParam = Param toValue Nil
+    dynamicParam = Dynamic toValue Nil
 
     -- | Convert to value.
     toValue :: a -> p
