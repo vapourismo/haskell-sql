@@ -10,7 +10,6 @@
 module Language.SQL.Builder (
     Builder (..),
     buildCode,
-    buildCodeSegments,
     buildParams,
 
     type (++),
@@ -21,6 +20,7 @@ module Language.SQL.Builder (
     isolateParams
 ) where
 
+import           Control.Arrow
 import           Control.Monad.RWS.Strict
 
 import qualified Data.ByteString          as B
@@ -34,8 +34,6 @@ data Builder ts p where
     Nest  ::                 Builder ts (t -> p) -> Builder (t : ts) p
     Nil   ::                                        Builder '[]      p
 
-data DerivedStatic = DerivedStatic deriving Show
-
 instance Functor (Builder ts) where
     fmap f segment =
         case segment of
@@ -43,6 +41,8 @@ instance Functor (Builder ts) where
             Param param rest -> Param (f param) (fmap f rest)
             Nest  inner      -> Nest (fmap (fmap f) inner)
             Nil              -> Nil
+
+data DerivedStatic = DerivedStatic deriving Show
 
 instance (Show p) => Show (Builder ts p) where
     show builder =
@@ -56,9 +56,6 @@ instance (Show p) => Show (Builder ts p) where
                     Nest  inner      -> showBuilder (DerivedStatic <$ inner)
                     Nil              -> []
 
-instance IsString (Builder ts p -> Builder ts p) where
-    fromString str = Code (UTF8.fromString str)
-
 instance IsString (Builder '[] p) where
     fromString str = Code (UTF8.fromString str) Nil
 
@@ -67,7 +64,7 @@ instance Monoid (Builder '[] p) where
 
     mappend = append
 
--- | Unnest 'Builder'.
+-- | Dual of 'Nest'.
 unnest :: Builder (t : ts) p -> Builder ts (t -> p)
 unnest segment =
     case segment of
@@ -75,7 +72,7 @@ unnest segment =
         Param param rest -> Param (const param) (unnest rest)
         Nest  inner      -> inner
 
--- | Remove code segments from the 'Builder'.
+-- | Remove code segments from a 'Builder'.
 isolateParams :: Builder ts p -> Builder ts p
 isolateParams segment =
     case segment of
@@ -121,7 +118,7 @@ instance WithParams ts => WithParams (t : ts) where
             Param value rest -> withParams (ret . (value :)) rest                  input
             Nest  inner      -> withParams ret               (($ input) <$> inner)
 
--- | Read-write-state-transformer which gathers the built code.
+-- | Reader-writer-state-transformer which gathers collects code segments.
 buildCodeSegments :: Builder ts p -> RWS (Word -> B.ByteString) B.ByteString Word ()
 buildCodeSegments segment =
     case segment of
@@ -130,17 +127,17 @@ buildCodeSegments segment =
             buildCodeSegments rest
 
         Param _ rest -> do
-            index <- get
-            code <- asks ($ index)
-            tell code
-            put (index + 1)
+            index <- state (id &&& (+ 1))
+            asks ($ index) >>= tell
             buildCodeSegments rest
 
         Nest inner -> buildCodeSegments inner
 
         Nil -> pure ()
 
--- | Gather the code from the Builder syntax tree.
+-- | @buildCode placeholderCode builder@ collects the code segments from a 'Builder'. It also
+-- translates 'Param's to placeholders using the given @placeholderCode@. The parameter to
+-- @placeholderCode@ is the parameter index. Indices start at 0.
 buildCode :: (Word -> B.ByteString) -> Builder ts p -> B.ByteString
 buildCode placeholder segment =
     snd (evalRWS (buildCodeSegments segment) placeholder 0)
