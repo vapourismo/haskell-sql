@@ -14,12 +14,11 @@ module Language.SQL.Builder (
     buildParams,
 
     type (++),
-    Function,
-    BuilderAux,
     append,
+    Function,
+    WithParams (..),
     unnest,
-    isolateParams,
-    withParams
+    isolateParams
 ) where
 
 import           Control.Monad.RWS.Strict
@@ -35,110 +34,27 @@ data Builder ts p where
     Nest  ::                 Builder ts (t -> p) -> Builder (t : ts) p
     Nil   ::                                        Builder '[]      p
 
--- | Unnest 'Builder'.
-unnest :: BuilderAux ts => Builder (t : ts) p -> Builder ts (t -> p)
-unnest segment =
-    case segment of
-        Code  code  rest -> Code  code          (unnest rest)
-        Param param rest -> Param (const param) (unnest rest)
-        Nest  inner      -> inner
-
--- | Append two type lists.
-type family (++) ts us where
-    (++) '[]      us = us
-    (++) (t : ts) us = t : ts ++ us
-
--- | @Function '[p1, p2, ... pn] r@ constructs a type signature @p1 -> p2 -> ... pn -> r@.
-type family Function ts r where
-    Function '[]      r = r
-    Function (t : ts) r = t -> Function ts r
-
--- | Auxiliary 'Builder'-related functions
-class BuilderAux ts where
-    -- | Show sub-components of the builder.
-    showBuilder :: Show a => Builder ts a -> [String]
-
-    -- | Map inner parameters.
-    fmapBuilder :: (a -> b) -> Builder ts a -> Builder ts b
-
-    -- | Append builders.
-    append :: BuilderAux us => Builder ts p -> Builder us p -> Builder (ts ++ us) p
-
-    -- | Retain only parameters.
-    isolateParams :: Builder ts p -> Builder ts p
-
-    -- | Do something with parameters inside the builder.
-    withParams :: ([p] -> r) -> Builder ts p -> Function ts r
-
-instance BuilderAux '[] where
-    showBuilder segment =
-        case segment of
-            Code  code  rest -> UTF8.toString code                : showBuilder rest
-            Param param rest -> ("<param: " ++ show param ++ ">") : showBuilder rest
-            Nil              -> []
-
-    fmapBuilder f segment =
-        case segment of
-            Code  code  rest -> Code  code      (f <$> rest)
-            Param param rest -> Param (f param) (f <$> rest)
-            Nil              -> Nil
-
-    append segment rhs =
-        case segment of
-            Code  code  lhs -> Code  code  (append lhs rhs)
-            Param param lhs -> Param param (append lhs rhs)
-            Nil             -> rhs
-
-    isolateParams segment =
-        case segment of
-            Code  _     rest -> isolateParams rest
-            Param param rest -> Param param (isolateParams rest)
-            Nil              -> Nil
-
-    withParams ret segment =
-        case segment of
-            Code  _     rest -> withParams ret               rest
-            Param param rest -> withParams (ret . (param :)) rest
-            Nil              -> ret []
-
 data DerivedStatic = DerivedStatic deriving Show
 
-instance BuilderAux ts => BuilderAux (t : ts) where
-    showBuilder segment =
+instance Functor (Builder ts) where
+    fmap f segment =
         case segment of
-            Code  code  rest -> UTF8.toString code                 : showBuilder rest
-            Param param rest -> ("<static: " ++ show param ++ ">") : showBuilder rest
-            Nest  inner      -> showBuilder (DerivedStatic <$ inner)
+            Code  code  rest -> Code  code      (fmap f rest)
+            Param param rest -> Param (f param) (fmap f rest)
+            Nest  inner      -> Nest (fmap (fmap f) inner)
+            Nil              -> Nil
 
-    fmapBuilder f segment =
-        case segment of
-            Code  code  rest -> Code  code      (f <$> rest)
-            Param param rest -> Param (f param) (f <$> rest)
-            Nest  inner      -> Nest (fmap f <$> inner)
-
-    append segment rhs =
-        case segment of
-            Code  code  lhs -> Code  code  (append lhs rhs)
-            Param param lhs -> Param param (append lhs rhs)
-            Nest  inner     -> Nest (append inner (const <$> rhs))
-
-    isolateParams segment =
-        case segment of
-            Code  _     rest -> isolateParams rest
-            Param param rest -> Param param (isolateParams rest)
-            Nest  inner      -> Nest (isolateParams inner)
-
-    withParams ret segment input =
-        case segment of
-            Code  _     rest -> withParams ret               rest                  input
-            Param value rest -> withParams (ret . (value :)) rest                  input
-            Nest  inner      -> withParams ret               (($ input) <$> inner)
-
-instance BuilderAux ts => Functor (Builder ts) where
-    fmap = fmapBuilder
-
-instance (BuilderAux ts, Show p) => Show (Builder ts p) where
-    show builder = concat (showBuilder builder)
+instance (Show p) => Show (Builder ts p) where
+    show builder =
+        concat (showBuilder builder)
+        where
+            showBuilder :: Show p => Builder ts p -> [String]
+            showBuilder segment =
+                case segment of
+                    Code  code  rest -> UTF8.toString code                : showBuilder rest
+                    Param param rest -> ("<param: " ++ show param ++ ">") : showBuilder rest
+                    Nest  inner      -> showBuilder (DerivedStatic <$ inner)
+                    Nil              -> []
 
 instance IsString (Builder ts p -> Builder ts p) where
     fromString str = Code (UTF8.fromString str)
@@ -150,6 +66,60 @@ instance Monoid (Builder '[] p) where
     mempty = Code B.empty Nil
 
     mappend = append
+
+-- | Unnest 'Builder'.
+unnest :: Builder (t : ts) p -> Builder ts (t -> p)
+unnest segment =
+    case segment of
+        Code  code  rest -> Code  code          (unnest rest)
+        Param param rest -> Param (const param) (unnest rest)
+        Nest  inner      -> inner
+
+-- | Remove code segments from the 'Builder'.
+isolateParams :: Builder ts p -> Builder ts p
+isolateParams segment =
+    case segment of
+        Code  _     rest -> isolateParams rest
+        Param param rest -> Param param (isolateParams rest)
+        Nest  inner      -> Nest (isolateParams inner)
+        Nil              -> Nil
+
+-- | Append two type lists.
+type family (++) ts us where
+    (++) '[]      us = us
+    (++) (t : ts) us = t : ts ++ us
+
+-- | Append 'two' builders.
+append :: Builder ts p -> Builder us p -> Builder (ts ++ us) p
+append segment rhs =
+    case segment of
+        Code  code  lhs -> Code  code  (append lhs rhs)
+        Param param lhs -> Param param (append lhs rhs)
+        Nil             -> rhs
+        Nest  inner     -> Nest (append inner (const <$> rhs))
+
+-- | @Function '[p1, p2, ... pn] r@ constructs a type signature @p1 -> p2 -> ... pn -> r@.
+type family Function ts r where
+    Function '[]      r = r
+    Function (t : ts) r = t -> Function ts r
+
+class WithParams ts where
+    -- | Do something with parameters inside the builder.
+    withParams :: ([p] -> r) -> Builder ts p -> Function ts r
+
+instance WithParams '[] where
+    withParams ret segment =
+        case segment of
+            Code  _     rest -> withParams ret               rest
+            Param param rest -> withParams (ret . (param :)) rest
+            Nil              -> ret []
+
+instance WithParams ts => WithParams (t : ts) where
+    withParams ret segment input =
+        case segment of
+            Code  _     rest -> withParams ret               rest                  input
+            Param value rest -> withParams (ret . (value :)) rest                  input
+            Nest  inner      -> withParams ret               (($ input) <$> inner)
 
 -- | Read-write-state-transformer which gathers the built code.
 buildCodeSegments :: Builder ts p -> RWS (Word -> B.ByteString) B.ByteString Word ()
@@ -177,6 +147,6 @@ buildCode placeholder segment =
 
 -- | @buildParams sql@ produces a function which collects all the necessary parameters for the
 -- query described in @sql@.
-buildParams :: BuilderAux ts => Builder ts p -> Function ts [p]
+buildParams :: WithParams ts => Builder ts p -> Function ts [p]
 buildParams =
     withParams id
