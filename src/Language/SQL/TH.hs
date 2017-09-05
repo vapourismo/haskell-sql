@@ -1,7 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Language.SQL.TH (
-    sql
+    sql,
+    FromBuilder (..)
 ) where
 
 import           Control.Applicative
@@ -98,10 +99,11 @@ sqlCode =
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
 parseSqlCode inputCode = do
-    let code = dropWhileEnd isSpace (dropWhile isSpace inputCode)
-
-    Loc _ _ _ (lineStart, charStart) _ <- location
-    let reportParseError parseError = do
+    result <- runParserT (sqlCode <* eof) () "quasi-quote"
+                         (dropWhileEnd isSpace (dropWhile isSpace inputCode))
+    case result of
+        Left parseError -> do
+            Loc _ _ _ (lineStart, charStart) _ <- location
             let sourcePos = errorPos parseError
                 lineReal  = lineStart + sourceLine sourcePos - 1
                 charReal  = charStart + sourceColumn sourcePos - 1
@@ -114,7 +116,9 @@ parseSqlCode inputCode = do
                 ++ "): "
                 ++ intercalate ", " (tail (lines (show parseError)))
 
-    runParserT (sqlCode <* eof) () "quasi-quote" code >>= either reportParseError pure
+        Right result ->
+            [e| fromBuilder $(pure result) |]
+
 
 -- | Basic SQL quasi-quoter
 sql :: QuasiQuoter
@@ -123,3 +127,16 @@ sql =
                 , quoteDec  = const (error "'sql' quasi-quoter works only in expressions")
                 , quotePat  = const (error "'sql' quasi-quoter works only in expressions")
                 , quoteType = const (error "'sql' quasi-quoter works only in expressions") }
+
+class FromBuilder a where
+    -- | Build something from a 'Builder'.
+    fromBuilder :: Placeholder p => Builder ts p -> a ts p
+
+instance FromBuilder Builder where
+    fromBuilder = id
+
+instance FromBuilder Query where
+    fromBuilder = buildQuery
+
+instance FromBuilder PrepQuery where
+    fromBuilder = buildPrepQuery
