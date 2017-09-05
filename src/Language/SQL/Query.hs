@@ -1,31 +1,64 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Language.SQL.Query (
     Query (..),
-    PrepQuery (..),
+    buildQuery,
 
+    PrepQuery (..),
+    buildPrepQuery,
+
+    Placeholder (..),
     Param (..)
 ) where
 
 import qualified Data.ByteString      as B
+import           Data.Hashable
+import           Data.Semigroup
+import           Data.String
+import           Data.Tagged
 
 import           Language.SQL.Builder
 
 -- | Query
-data Query p =
+data Query ts p =
     Query { queryCode   :: B.ByteString
-          , queryParams :: [p] }
+          , queryParams :: Builder ts p }
+    deriving Show
 
-deriving instance (Show p) => Show (Query p)
-deriving instance (Eq p)   => Eq (Query p)
-deriving instance (Ord p)  => Ord (Query p)
+class Placeholder p where
+    -- | Generate the placeholder code for a parameter at a given index.
+    placeholderCode :: Tagged p (Word -> B.ByteString)
+
+-- | Build a 'Query' from a 'Builder'.
+buildQuery :: forall ts p. Placeholder p => Builder ts p -> Query ts p
+buildQuery builder =
+    Query (buildCode (untag @p placeholderCode) builder)
+          (isolateParams builder)
 
 -- | Preparable query
 data PrepQuery ts p =
-    PrepQuery { prepQueryCode   :: B.ByteString
-              , prepQueryParams :: Builder ts p }
+    PrepQuery { prepName     :: B.ByteString
+              , prepCodeHash :: Int
+              , prepQuery    :: Query ts p }
+    deriving Show
+
+-- | Build a 'PrepQuery' from a 'Builder'.
+buildPrepQuery :: forall ts p. Placeholder p => Builder ts p -> PrepQuery ts p
+buildPrepQuery builder =
+    PrepQuery name codeHash query
+    where
+        query    = buildQuery builder
+        codeHash = hash (queryCode query)
+        name     = "PrepQuery" <> nameHashComp
+
+        nameHashComp
+            | codeHash < 0 = fromString ("0" ++ show (abs codeHash))
+            | otherwise    = fromString (show codeHash)
 
 -- | @a@ can be used as parameter type @p@.
 class Param p a where
