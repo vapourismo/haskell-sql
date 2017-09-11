@@ -48,7 +48,7 @@ data PrepQuery ts p =
     deriving Show
 
 -- | Build a 'PrepQuery' from a 'Builder'.
-buildPrepQuery :: forall ts p. Placeholder p => Builder ts p -> PrepQuery ts p
+buildPrepQuery :: Placeholder p => Builder ts p -> PrepQuery ts p
 buildPrepQuery builder =
     PrepQuery name codeHash query
     where
