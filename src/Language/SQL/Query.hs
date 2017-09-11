@@ -34,6 +34,10 @@ class Placeholder p where
     -- | Generate the placeholder code for a parameter at a given index.
     placeholderCode :: Tagged p (Word -> B.ByteString)
 
+instance Placeholder p => Placeholder (a -> p) where
+    placeholderCode =
+        Tagged (untag @p placeholderCode)
+
 -- | Build a 'Query' from a 'Builder'.
 buildQuery :: forall ts p. Placeholder p => Builder ts p -> Query ts p
 buildQuery builder =
