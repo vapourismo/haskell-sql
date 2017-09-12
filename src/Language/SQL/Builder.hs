@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE ExplicitNamespaces    #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -12,12 +13,13 @@ module Language.SQL.Builder (
     buildCode,
     buildParams,
 
+    unnest,
+    replaceNil,
+    isolateParams,
     type (++),
     append,
     Function,
-    WithParams (..),
-    unnest,
-    isolateParams
+    WithParams (..)
 ) where
 
 import           Control.Arrow
@@ -41,6 +43,18 @@ instance Functor (Builder ts) where
             Param param rest -> Param (f param) (fmap f rest)
             Nest  inner      -> Nest (fmap (fmap f) inner)
             Nil              -> Nil
+
+instance Applicative (Builder '[]) where
+    pure x = Param x Nil
+
+    Code  code rest <*> rhs = Code code (rest <*> rhs)
+    Param f    rest <*> rhs = replaceNil (f <$> rhs) (rest <*> rhs)
+    Nil             <*> _   = Nil
+
+instance Applicative (Builder ts) => Applicative (Builder (t : ts)) where
+    pure x = Nest (const <$> pure x)
+
+    lhs <*> rhs = Nest ((<*>) <$> unnest lhs <*> unnest rhs)
 
 data DerivedStatic = DerivedStatic deriving Show
 
@@ -71,6 +85,15 @@ unnest segment =
         Code  code  rest -> Code  code          (unnest rest)
         Param param rest -> Param (const param) (unnest rest)
         Nest  inner      -> inner
+
+-- | @replaceNil a b@ appends @b@ to @a@.
+replaceNil :: Builder ts p -> Builder '[] p -> Builder ts p
+replaceNil segment nil =
+    case segment of
+        Code  code rest  -> Code code (replaceNil rest nil)
+        Param param rest -> Param param (replaceNil rest nil)
+        Nest  inner      -> Nest (replaceNil inner (const <$> nil))
+        Nil              -> nil
 
 -- | Remove code segments from a 'Builder'.
 isolateParams :: Builder ts p -> Builder ts p
