@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE ExplicitNamespaces    #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 module Language.SQL.Builder (
     Builder (..),
@@ -14,9 +16,9 @@ module Language.SQL.Builder (
     buildParams,
 
     unnest,
-    replaceNil,
     isolateParams,
     type (++),
+    AppendProps,
     append,
     Function,
     WithParams (..)
@@ -27,6 +29,7 @@ import           Control.Monad.RWS.Strict
 
 import qualified Data.ByteString          as B
 import qualified Data.ByteString.UTF8     as UTF8
+import           Data.Kind
 import           Data.String
 
 -- | Query builder
@@ -48,7 +51,7 @@ instance Applicative (Builder '[]) where
     pure x = Param x Nil
 
     Code  code rest <*> rhs = Code code (rest <*> rhs)
-    Param f    rest <*> rhs = replaceNil (f <$> rhs) (rest <*> rhs)
+    Param f    rest <*> rhs = append (f <$> rhs) (rest <*> rhs)
     Nil             <*> _   = Nil
 
 instance Applicative (Builder ts) => Applicative (Builder (t : ts)) where
@@ -86,15 +89,6 @@ unnest segment =
         Param param rest -> Param (const param) (unnest rest)
         Nest  inner      -> inner
 
--- | @replaceNil a b@ appends @b@ to @a@.
-replaceNil :: Builder ts p -> Builder '[] p -> Builder ts p
-replaceNil segment nil =
-    case segment of
-        Code  code rest  -> Code code (replaceNil rest nil)
-        Param param rest -> Param param (replaceNil rest nil)
-        Nest  inner      -> Nest (replaceNil inner (const <$> nil))
-        Nil              -> nil
-
 -- | Remove code segments from a 'Builder'.
 isolateParams :: Builder ts p -> Builder ts p
 isolateParams segment =
@@ -106,11 +100,16 @@ isolateParams segment =
 
 -- | Append two type lists.
 type family (++) ts us where
-    (++) '[]      us = us
-    (++) (t : ts) us = t : ts ++ us
+    (++) '[]      us  = us
+    (++) (t : ts) us  = t : ts ++ us
+
+-- | Properties of (++)
+type family AppendProps (ts :: [*]) (us :: [*]) :: Constraint where
+    AppendProps (t : ts) us = (AppendProps ts us, ((t : ts) ++ us) ~ (t : (ts ++ us)))
+    AppendProps ts       us = ()
 
 -- | Append 'two' builders.
-append :: Builder ts p -> Builder us p -> Builder (ts ++ us) p
+append :: AppendProps ts us => Builder ts p -> Builder us p -> Builder (ts ++ us) p
 append segment rhs =
     case segment of
         Code  code  lhs -> Code  code  (append lhs rhs)
