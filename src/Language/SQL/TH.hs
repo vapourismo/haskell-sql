@@ -1,4 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module Language.SQL.TH (
     sql,
@@ -81,7 +83,6 @@ static = do
 
     lift $ do
         mbName <- lookupValueName strName
-
         case mbName of
             Nothing      -> fail ("Name " ++ show strName ++ " does not refer to a value")
             Just valName -> [e| append (staticParam $(varE valName)) |]
@@ -129,15 +130,15 @@ sql =
                 , quotePat  = const (error "'sql' quasi-quoter works only in expressions")
                 , quoteType = const (error "'sql' quasi-quoter works only in expressions") }
 
-class FromBuilder a where
+class FromBuilder a p where
     -- | Build something from a 'Builder'.
-    fromBuilder :: Placeholder p => Builder ts p -> a ts p
+    fromBuilder :: Builder ts p -> a ts p
 
-instance FromBuilder Builder where
+instance FromBuilder Builder p where
     fromBuilder = id
 
-instance FromBuilder Query where
+instance Placeholder p => FromBuilder Query p where
     fromBuilder = buildQuery
 
-instance FromBuilder PrepQuery where
+instance Placeholder p => FromBuilder PrepQuery p where
     fromBuilder = buildPrepQuery
