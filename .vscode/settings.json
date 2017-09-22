@@ -9,5 +9,6 @@
 	"haskero.intero.ghciOptions": [
 		"-Wall",
 		"-fno-warn-name-shadowing"
-	]
+	],
+	"git.ignoreLimitWarning": true
 }
