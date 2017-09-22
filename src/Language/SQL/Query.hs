@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -76,3 +77,6 @@ class Param p a where
 
     -- | Convert to value.
     toValue :: a -> p
+
+instance {-# OVERLAPPABLE #-} Param p p where
+    toValue = id

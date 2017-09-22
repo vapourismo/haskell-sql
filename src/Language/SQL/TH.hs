@@ -81,6 +81,7 @@ static = do
 
     lift $ do
         mbName <- lookupValueName strName
+
         case mbName of
             Nothing      -> fail ("Name " ++ show strName ++ " does not refer to a value")
             Just valName -> [e| append (staticParam $(varE valName)) |]
