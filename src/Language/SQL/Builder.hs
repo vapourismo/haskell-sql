@@ -37,9 +37,9 @@ data Builder ts p where
 instance Functor (Builder ts) where
     fmap f segment =
         case segment of
-            Code  code  rest -> Code  code      (fmap f rest)
-            Param param rest -> Param (f param) (fmap f rest)
-            Nest  inner      -> Nest (fmap (fmap f) inner)
+            Code  code  rest -> Code  code      (f <$> rest)
+            Param param rest -> Param (f param) (f <$> rest)
+            Nest  inner      -> Nest            (fmap f <$> inner)
             Nil              -> Nil
 
 instance Applicative (Builder '[]) where
