@@ -54,19 +54,17 @@ instance Applicative (Builder ts) => Applicative (Builder (t : ts)) where
 
     lhs <*> rhs = Nest ((<*>) <$> unnest lhs <*> unnest rhs)
 
-data DerivedStatic = DerivedStatic deriving Show
-
-instance (Show p) => Show (Builder ts p) where
+instance Show (Builder ts p) where
     show builder =
         concat (showBuilder builder)
         where
-            showBuilder :: Show p => Builder ts p -> [String]
+            showBuilder :: Builder ts p -> [String]
             showBuilder segment =
                 case segment of
-                    Code  code  rest -> UTF8.toString code                : showBuilder rest
-                    Param param rest -> ("<param: " ++ show param ++ ">") : showBuilder rest
-                    Nest  inner      -> showBuilder (DerivedStatic <$ inner)
-                    Nil              -> []
+                    Code  code  rest  -> UTF8.toString code : showBuilder rest
+                    Param _     rest  -> "$(param)" : showBuilder rest
+                    Nest        inner -> showBuilder inner
+                    Nil               -> []
 
 instance IsString (Builder '[] p) where
     fromString str = Code (UTF8.fromString str) Nil
