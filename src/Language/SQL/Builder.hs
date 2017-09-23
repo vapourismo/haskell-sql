@@ -1,27 +1,23 @@
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE ExplicitNamespaces    #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE ExplicitNamespaces #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE GADTs              #-}
+{-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE TypeOperators      #-}
 
 module Language.SQL.Builder (
     Builder (..),
     buildCode,
     buildParams,
 
+    nest,
     unnest,
     isolateParams,
     type (++),
-    AppendProps,
     append,
     Function,
-    WithParams (..)
+    withParams
 ) where
 
 import           Control.Arrow
@@ -29,7 +25,6 @@ import           Control.Monad.RWS.Strict
 
 import qualified Data.ByteString          as B
 import qualified Data.ByteString.UTF8     as UTF8
-import           Data.Kind
 import           Data.String
 
 -- | Query builder
@@ -81,7 +76,11 @@ instance Monoid (Builder '[] p) where
 
     mappend = append
 
--- | Dual of 'Nest'.
+-- | Alias for 'Nest'.
+nest :: Builder ts (t -> p) -> Builder (t : ts) p
+nest = Nest
+
+-- | Dual of 'nest'.
 unnest :: Builder (t : ts) p -> Builder ts (t -> p)
 unnest segment =
     case segment of
@@ -103,13 +102,8 @@ type family (++) ts us where
     (++) '[]      us  = us
     (++) (t : ts) us  = t : ts ++ us
 
--- | Properties of (++)
-type family AppendProps (ts :: [*]) (us :: [*]) :: Constraint where
-    AppendProps (t : ts) us = (AppendProps ts us, ((t : ts) ++ us) ~ (t : (ts ++ us)))
-    AppendProps ts       us = ()
-
 -- | Append 'two' builders.
-append :: AppendProps ts us => Builder ts p -> Builder us p -> Builder (ts ++ us) p
+append :: Builder ts p -> Builder us p -> Builder (ts ++ us) p
 append segment rhs =
     case segment of
         Code  code  lhs -> Code  code  (append lhs rhs)
@@ -122,23 +116,14 @@ type family Function ts r where
     Function '[]      r = r
     Function (t : ts) r = t -> Function ts r
 
-class WithParams ts where
-    -- | Do something with parameters inside the builder.
-    withParams :: ([p] -> r) -> Builder ts p -> Function ts r
-
-instance WithParams '[] where
-    withParams ret segment =
-        case segment of
-            Code  _     rest -> withParams ret               rest
-            Param param rest -> withParams (ret . (param :)) rest
-            Nil              -> ret []
-
-instance WithParams ts => WithParams (t : ts) where
-    withParams ret segment input =
-        case segment of
-            Code  _     rest -> withParams ret               rest                  input
-            Param value rest -> withParams (ret . (value :)) rest                  input
-            Nest  inner      -> withParams ret               (($ input) <$> inner)
+-- | Do something with parameters inside the builder.
+withParams :: ([p] -> r) -> Builder ts p -> Function ts r
+withParams ret segment =
+    case segment of
+        Code  _     rest  -> withParams ret               rest
+        Param value rest  -> withParams (ret . (value :)) rest
+        Nest        inner -> \ param -> withParams ret (($ param) <$> inner)
+        Nil               -> ret []
 
 -- | Reader-writer-state-transformer which gathers collects code segments.
 buildCodeSegments :: Builder ts p -> RWS (Word -> B.ByteString) B.ByteString Word ()
@@ -166,6 +151,5 @@ buildCode placeholder segment =
 
 -- | @buildParams sql@ produces a function which collects all the necessary parameters for the
 -- query described in @sql@.
-buildParams :: WithParams ts => Builder ts p -> Function ts [p]
-buildParams =
-    withParams id
+buildParams :: Builder ts p -> Function ts [p]
+buildParams = withParams id
