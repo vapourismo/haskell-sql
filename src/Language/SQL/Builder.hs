@@ -42,6 +42,13 @@ instance Functor (Builder ts) where
             Nest  nest  rest -> Nest  (fmap f <$> nest) (f <$> rest)
             Nil              -> Nil
 
+instance Applicative (Builder '[]) where
+    pure x = Param x Nil
+
+    Code  code rest <*> rhs = Code code (rest <*> rhs)
+    Param f    rest <*> rhs = append (f <$> rhs) (rest <*> rhs)
+    Nil             <*> _   = Nil
+
 instance Show (Builder ts p) where
     show builder =
         concat (showBuilder builder)
