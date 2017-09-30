@@ -40,7 +40,14 @@ toCodeExp code =
 param :: Parser Exp
 param = do
     char '?'
-    lift [e| append (Nest dynamicParam) |]
+    lift [e| Nest dynamicParam |]
+
+-- | Parameter redirection
+paramRedirection :: Parser Exp
+paramRedirection = do
+    char '?'
+    body <- inParentheses
+    either fail (\ exp -> lift [e| Nest $(pure exp) |]) (parseExp body)
 
 -- | Quotation
 quotation :: Char -> Parser String
@@ -63,18 +70,6 @@ inParentheses = do
     char ')'
     pure ('(' : concat body ++ ")")
 
--- | Inlined 'SQL'
-inline :: Parser Exp
-inline = do
-    char '$'
-    body <- inParentheses
-    either fail (\ exp -> lift [e| append $(pure exp) |]) (parseExp body)
-
--- | Textual quote
-quote :: Char -> Parser Exp
-quote delim =
-    quotation delim >>= toCodeExp
-
 -- | Static parameter
 static :: Parser Exp
 static = do
@@ -87,11 +82,24 @@ static = do
             Nothing      -> fail ("Name " ++ show strName ++ " does not refer to a value")
             Just valName -> [e| append (staticParam $(varE valName)) |]
 
+-- | Inlined 'Builder'
+inline :: Parser Exp
+inline = do
+    char '$'
+    body <- inParentheses
+    either fail (\ exp -> lift [e| append $(pure exp) |]) (parseExp body)
+
+-- | Textual quote
+quote :: Char -> Parser Exp
+quote delim =
+    quotation delim >>= toCodeExp
+
 -- | Parser for SQL code
 sqlCode :: Parser Exp
 sqlCode =
     foldr AppE (ConE 'Nil)
-    <$> many (choice [ param
+    <$> many (choice [ try paramRedirection
+                     , param
                      , try inline
                      , static
                      , quote '"'

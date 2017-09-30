@@ -57,7 +57,7 @@ instance Show (Builder ts p) where
             showBuilder segment =
                 case segment of
                     Code  code  rest -> UTF8.toString code : showBuilder rest
-                    Param _     rest -> "$(param)" : showBuilder rest
+                    Param _     rest -> "<placeholder>" : showBuilder rest
                     Nest  nest  rest -> showBuilder nest ++ showBuilder rest
                     Nil              -> []
 
