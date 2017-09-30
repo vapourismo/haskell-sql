@@ -39,13 +39,13 @@ toCodeExp code =
 -- | Parameter
 param :: Parser Exp
 param = do
-    char '?'
+    char '#'
     lift [e| Nest dynamicParam |]
 
 -- | Parameter redirection
 paramRedirection :: Parser Exp
 paramRedirection = do
-    char '?'
+    char '#'
     body <- inParentheses
     either fail (\ exp -> lift [e| Nest $(pure exp) |]) (parseExp body)
 
