@@ -5,16 +5,17 @@ module Language.SQL.Builder (
     flatten
 ) where
 
-import           Prelude          hiding (foldr, id, (.))
+import           Prelude               hiding (foldr, id, (.))
 
 import           Control.Arrow
 import           Control.Category
 import           Control.Monad
 import           Data.Profunctor
 
-import qualified Data.ByteString  as ByteString
+import qualified Data.ByteString       as ByteString
+import qualified Data.ByteString.Char8 as CharString
 import           Data.Foldable
-import qualified Data.Sequence    as Seq
+import qualified Data.Sequence         as Seq
 import           Data.String
 
 -- | Builder element
@@ -53,6 +54,10 @@ mapHole _     (Code code) = Code code
 
 -- | Builder
 newtype Builder input output = Builder { unBuilder :: Seq.Seq (Element input output) }
+
+instance Show (Builder input output) where
+    show builder =
+        CharString.unpack (fst (flatten (\ index _ -> fromString ('$' : show (index + 1))) builder))
 
 instance Monoid (Builder input output) where
     {-# INLINE mempty #-}
