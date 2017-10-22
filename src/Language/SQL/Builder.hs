@@ -89,9 +89,9 @@ instance Category Builder where
     id = Builder (Seq.singleton (Hole id))
 
     Builder lhs . Builder rhs =
-        Builder (join (fillHole <$> lhs))
+        Builder (join (fillHole <$> rhs))
         where
-            fillHole (Hole gen)  = fmap gen <$> rhs
+            fillHole (Hole gen)  = lmap gen <$> lhs
             fillHole (Code code) = Seq.singleton (Code code)
 
 instance Arrow Builder where
