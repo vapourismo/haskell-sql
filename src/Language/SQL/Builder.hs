@@ -44,6 +44,8 @@ instance Profunctor Element where
 
     rmap = fmap
 
+{-# INLINE mapHole #-}
+
 -- | Transform the 'Hole', if it is one.
 mapHole
     :: ((input -> output) -> (input' -> output'))
@@ -91,6 +93,8 @@ instance Profunctor Builder where
     rmap mapOutput (Builder elements) = Builder (rmap mapOutput <$> elements)
 
 instance Category Builder where
+    {-# INLINE id #-}
+
     id = Builder (Seq.singleton (Hole id))
 
     Builder lhs . Builder rhs =
@@ -100,9 +104,15 @@ instance Category Builder where
             fillHole (Code code) = Seq.singleton (Code code)
 
 instance Arrow Builder where
+    {-# INLINE arr #-}
+
     arr = hole
 
+    {-# INLINE first #-}
+
     first = mapHoles first
+
+    {-# INLINE second #-}
 
     second = mapHoles second
 
@@ -116,9 +126,13 @@ mapHoles
     -> Builder input' output'
 mapHoles trans (Builder lhs) = Builder (mapHole trans <$> lhs)
 
+{-# INLINE hole #-}
+
 -- | Produce a 'Builder' that only consists of a 'Hole'.
 hole :: (input -> output) -> Builder input output
 hole gen = Builder (Seq.singleton (Hole gen))
+
+{-# INLINE code #-}
 
 -- | Produce a 'Builder' that only consists of 'Code'.
 code :: ByteString.ByteString -> Builder input output
