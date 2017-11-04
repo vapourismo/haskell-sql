@@ -7,10 +7,9 @@ module Language.SQL.TH (
 import           Control.Applicative
 import           Control.Monad.Trans
 
-import qualified Codec.Binary.UTF8.String    as UTF8
-import qualified Data.ByteString             as B
 import           Data.Char
 import           Data.List
+import           Data.String
 import           Text.Parsec                 hiding (many, (<|>))
 
 import           Language.Haskell.Meta.Parse
@@ -23,14 +22,14 @@ import           Language.SQL.Builder
 type Parser = ParsecT String () Q
 
 -- | Generate a 'B.ByteString' expression using the given 'String'.
-liftAsByteString :: String -> Q Exp
-liftAsByteString str =
-    AppE (VarE 'B.pack) <$> TH.lift (UTF8.encode str)
+liftString :: String -> Q Exp
+liftString str =
+    AppE (VarE 'fromString) <$> TH.lift str
 
 -- | Generate a 'Code' expression.
 toCodeExp :: String -> Parser Exp
 toCodeExp strCode =
-    AppE (VarE 'code) <$> lift (liftAsByteString strCode)
+    AppE (VarE 'code) <$> lift (liftString strCode)
 
 -- | Something in parentheses
 inParentheses :: Parser String

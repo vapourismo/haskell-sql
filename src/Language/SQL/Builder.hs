@@ -2,6 +2,10 @@ module Language.SQL.Builder (
     Builder,
     hole,
     code,
+
+    mapHoles,
+    mapCodes,
+
     flatten
 ) where
 
@@ -10,58 +14,65 @@ import           Prelude               hiding (foldr, id, (.))
 import           Control.Arrow
 import           Control.Category
 import           Control.Monad
-import           Data.Profunctor
 
-import qualified Data.ByteString       as ByteString
-import qualified Data.ByteString.Char8 as CharString
+import           Data.Profunctor
 import           Data.Foldable
 import qualified Data.Sequence         as Seq
 import           Data.String
 
 -- | Builder element
-data Element input output
-    = Hole (input -> output)
-    | Code ByteString.ByteString
+data Element code arr input output
+    = Hole (arr input output)
+    | Code code
 
-instance Functor (Element input) where
+instance Functor (arr input) => Functor (Element code arr input) where
     {-# INLINE fmap #-}
 
-    fmap mapOutput (Hole gen)  = Hole (mapOutput . gen)
+    fmap mapOutput (Hole gen)  = Hole (mapOutput <$> gen)
     fmap _         (Code code) = Code code
 
-instance Profunctor Element where
+instance Profunctor arr => Profunctor (Element code arr) where
     {-# INLINE dimap #-}
 
-    dimap mapInput mapOutput (Hole gen)  = Hole (mapOutput . gen . mapInput)
+    dimap mapInput mapOutput (Hole gen)  = Hole (dimap mapInput mapOutput gen)
     dimap _        _         (Code code) = Code code
 
     {-# INLINE lmap #-}
 
-    lmap mapInput (Hole gen)  = Hole (gen . mapInput)
+    lmap mapInput (Hole gen)  = Hole (lmap mapInput gen)
     lmap _        (Code code) = Code code
 
     {-# INLINE rmap #-}
 
-    rmap = fmap
+    rmap mapOutput (Hole gen)  = Hole (rmap mapOutput gen)
+    rmap _         (Code code) = Code code
 
 {-# INLINE mapHole #-}
 
 -- | Transform the 'Hole', if it is one.
 mapHole
-    :: ((input -> output) -> (input' -> output'))
-    -> Element input output
-    -> Element input' output'
+    :: (arr input output -> arr' input' output')
+    -> Element code arr  input  output
+    -> Element code arr' input' output'
 mapHole trans (Hole gen)  = Hole (trans gen)
 mapHole _     (Code code) = Code code
 
+{-# INLINE mapCode #-}
+
+-- | Transform the 'Code', if it is one.
+mapCode :: (code -> code') -> Element code arr input output -> Element code' arr input output
+mapCode _     (Hole hole) = Hole hole
+mapCode trans (Code code) = Code (trans code)
+
 -- | Builder
-newtype Builder input output = Builder { unBuilder :: Seq.Seq (Element input output) }
+newtype Builder code arr input output =
+    Builder { unBuilder :: Seq.Seq (Element code arr input output) }
 
-instance Show (Builder input output) where
+instance (Monoid code, Show code, IsString code) => Show (Builder code arr input output) where
     show builder =
-        CharString.unpack (fst (flatten (\ index _ -> fromString ('$' : show (index + 1))) builder))
+        show (fst (flatten (\ index _ -> fromString ('$' : show (index + 1))) builder))
 
-instance Monoid (Builder input output) where
+instance Monoid (Builder code arr input output) where
     {-# INLINE mempty #-}
 
     mempty = Builder Seq.empty
@@ -74,12 +85,12 @@ instance Monoid (Builder input output) where
 
     mconcat builders = Builder (mconcat (unBuilder <$> builders))
 
-instance Functor (Builder input) where
+instance Functor (arr input) => Functor (Builder code arr input) where
     {-# INLINE fmap #-}
 
     fmap mapOutput (Builder elements) = Builder (fmap mapOutput <$> elements)
 
-instance Profunctor Builder where
+instance Profunctor arr => Profunctor (Builder code arr) where
     {-# INLINE dimap #-}
 
     dimap mapInput mapOutput (Builder elements) = Builder (dimap mapInput mapOutput <$> elements)
@@ -92,7 +103,7 @@ instance Profunctor Builder where
 
     rmap mapOutput (Builder elements) = Builder (rmap mapOutput <$> elements)
 
-instance Category Builder where
+instance Category arr => Category (Builder code arr) where
     {-# INLINE id #-}
 
     id = Builder (Seq.singleton (Hole id))
@@ -100,13 +111,13 @@ instance Category Builder where
     Builder lhs . Builder rhs =
         Builder (join (fillHole <$> rhs))
         where
-            fillHole (Hole gen)  = lmap gen <$> lhs
+            fillHole (Hole gen)  = mapHole (. gen) <$> lhs
             fillHole (Code code) = Seq.singleton (Code code)
 
-instance Arrow Builder where
+instance Arrow arr => Arrow (Builder code arr) where
     {-# INLINE arr #-}
 
-    arr = hole
+    arr f = hole (arr f)
 
     {-# INLINE first #-}
 
@@ -116,46 +127,51 @@ instance Arrow Builder where
 
     second = mapHoles second
 
-instance IsString (Builder input output) where
+instance IsString code => IsString (Builder code arr input output) where
     fromString str = code (fromString str)
-
--- | Map all the 'Hole's inside the 'Builder'.
-mapHoles
-    :: ((input -> output) -> (input' -> output'))
-    -> Builder input output
-    -> Builder input' output'
-mapHoles trans (Builder lhs) = Builder (mapHole trans <$> lhs)
 
 {-# INLINE hole #-}
 
 -- | Produce a 'Builder' that only consists of a 'Hole'.
-hole :: (input -> output) -> Builder input output
+hole :: arr input output -> Builder code arr input output
 hole gen = Builder (Seq.singleton (Hole gen))
 
 {-# INLINE code #-}
 
 -- | Produce a 'Builder' that only consists of 'Code'.
-code :: ByteString.ByteString -> Builder input output
+code :: code -> Builder code arr input output
 code code = Builder (Seq.singleton (Code code))
+
+-- | Map all the 'Hole's inside the 'Builder'.
+mapHoles
+    :: (arr input output -> arr' input' output')
+    -> Builder code arr  input  output
+    -> Builder code arr' input' output'
+mapHoles trans (Builder elements) = Builder (mapHole trans <$> elements)
+
+-- | Map all the 'Code's inside the 'Builder'.
+mapCodes :: (code -> code') -> Builder code arr input output -> Builder code' arr input output
+mapCodes trans (Builder elements) = Builder (mapCode trans <$> elements)
 
 -- | Flatten 'Builder'.
 flatten
-    :: (Word -> (input -> output) -> ByteString.ByteString)
-    -> Builder input output
-    -> (ByteString.ByteString, [input -> output])
+    :: Monoid code
+    => (Word -> arr input output -> code)
+    -> Builder code arr input output
+    -> (code, [arr input output])
 flatten holeCode (Builder elements) =
     (code, gens)
     where
-        (_, code, gens) = foldr f (0, ByteString.empty, []) elements
+        (_, code, gens) = foldr f (0, mempty, []) elements
 
         f elem (index, codes, gens) =
             case elem of
                 Hole gen ->
                     ( index + 1
-                    , ByteString.append (holeCode index gen) codes
+                    , mappend (holeCode index gen) codes
                     , gen : gens )
 
                 Code code ->
                     ( index
-                    , ByteString.append code codes
+                    , mappend code codes
                     , gens )
