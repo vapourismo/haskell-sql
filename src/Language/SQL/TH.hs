@@ -25,7 +25,7 @@ type Parser = ParsecT String () Q
 -- | Generate a 'B.ByteString' expression using the given 'String'.
 liftAsByteString :: String -> Q Exp
 liftAsByteString str =
-    [e| B.pack $(TH.lift (UTF8.encode str)) |]
+    AppE (VarE 'B.pack) <$> TH.lift (UTF8.encode str)
 
 -- | Generate a 'Code' expression.
 toCodeExp :: String -> Parser Exp
@@ -40,23 +40,21 @@ inParentheses = do
                           , quotation '"'
                           , quotation '\''
                           , some (noneOf "'\"()") ]
-    char ')'
-    pure ('(' : concat body ++ ")")
+    ('(' : concat body ++ ")") <$ char ')'
 
 -- | Quotation
 quotation :: Char -> Parser String
 quotation delim = do
     char delim
-    body <- many (escaped <|> pure <$> noneOf [delim])
-    char delim
-    pure (delim : concat body ++ [delim])
-    where
-        escaped = (\ a b -> [a, b]) <$> char '\\' <*> anyChar
+    body <- many $
+        liftA2 (\ a b -> [a, b]) (char '\\') anyChar
+        <|> (pure <$> noneOf [delim])
+    (delim : concat body ++ [delim]) <$ char delim
 
 -- | Name pattern
 valueName :: Parser Name
 valueName = do
-    strName <- (:) <$> (letter <|> char '_') <*> many (alphaNum <|> char '_')
+    strName <- liftA2 (:) (letter <|> char '_') (many (alphaNum <|> char '_'))
     lift $ do
         mbName <- lookupValueName strName
         case mbName of
@@ -68,7 +66,9 @@ arrowCode :: Parser Exp
 arrowCode = do
     char '#'
     body <- inParentheses
-    either (lift . fail) (pure . AppE (VarE 'hole)) (parseExp body)
+    case parseExp body of
+        Left msg  -> lift (fail msg)
+        Right exp -> pure (AppE (VarE 'hole) exp)
 
 -- | Arrow name
 arrowName :: Parser Exp
@@ -81,7 +81,9 @@ inlineCode :: Parser Exp
 inlineCode = do
     char '$'
     body <- inParentheses
-    either (lift . fail) pure (parseExp body)
+    case parseExp body of
+        Left msg  -> lift (fail msg)
+        Right exp -> pure exp
 
 -- | Inline name
 inlineName :: Parser Exp
@@ -91,16 +93,15 @@ inlineName = do
 
 -- | Parser for SQL code
 sqlCode :: Parser Exp
-sqlCode = do
-    segments <- many $
-        choice [ quotation '"' >>= toCodeExp
-               , quotation '\'' >>= toCodeExp
-               , try arrowCode
-               , arrowName
-               , try inlineCode
-               , inlineName
-               , some (noneOf "\"'#$") >>= toCodeExp ]
-    lift [e| mconcat $(pure (ListE segments)) |]
+sqlCode =
+    fmap (AppE (VarE 'mconcat) . ListE) $
+        many $ choice [ quotation '"' >>= toCodeExp
+                      , quotation '\'' >>= toCodeExp
+                      , try arrowCode
+                      , arrowName
+                      , try inlineCode
+                      , inlineName
+                      , some (noneOf "\"'#$") >>= toCodeExp ]
 
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
