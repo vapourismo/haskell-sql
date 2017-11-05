@@ -1,21 +1,18 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Language.SQL.Query (
-    postgresPlaceholder,
-    mysqlPlaceholder,
-    mariadbPlaceholder
+    dollarSign,
+    questionMark
 ) where
 
 import Data.String
 
 import Language.SQL.Builder
 
-postgresPlaceholder :: IsString code => Word -> arr input output -> code
-postgresPlaceholder index _ =
-    fromString ('$' : show (index + 1))
+-- | PostgreSQL-style placeholders for which indices start at 1
+dollarSign :: IsString code => Word -> arr input output -> code
+dollarSign index _ = fromString ('$' : show (index + 1))
 
-mysqlPlaceholder :: IsString code => Word -> arr input output -> code
-mysqlPlaceholder _ _ =
-    fromString "?"
-
-mariadbPlaceholder :: IsString code => Word -> arr input output -> code
-mariadbPlaceholder =
-    mysqlPlaceholder
+-- | Question mark placeholder
+questionMark :: IsString code => Word -> arr input output -> code
+questionMark _ _ = fromString "?"
