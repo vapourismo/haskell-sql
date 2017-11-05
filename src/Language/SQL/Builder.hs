@@ -1,23 +1,26 @@
 module Language.SQL.Builder (
-    Builder,
+    Element (..),
+    mapHole,
+    mapCode,
+
+    Builder (..),
     hole,
     code,
-
     mapHoles,
     mapCodes,
 
     flatten
 ) where
 
-import           Prelude               hiding (foldr, id, (.))
+import           Prelude          hiding (foldr, id, (.))
 
 import           Control.Arrow
 import           Control.Category
 import           Control.Monad
 
-import           Data.Profunctor
 import           Data.Foldable
-import qualified Data.Sequence         as Seq
+import           Data.Profunctor
+import qualified Data.Sequence    as Seq
 import           Data.String
 
 -- | Builder element
@@ -142,12 +145,16 @@ hole gen = Builder (Seq.singleton (Hole gen))
 code :: code -> Builder code arr input output
 code code = Builder (Seq.singleton (Code code))
 
+{-# INLINE mapHoles #-}
+
 -- | Map all the 'Hole's inside the 'Builder'.
 mapHoles
     :: (arr input output -> arr' input' output')
     -> Builder code arr  input  output
     -> Builder code arr' input' output'
 mapHoles trans (Builder elements) = Builder (mapHole trans <$> elements)
+
+{-# INLINE mapCodes #-}
 
 -- | Map all the 'Code's inside the 'Builder'.
 mapCodes :: (code -> code') -> Builder code arr input output -> Builder code' arr input output
