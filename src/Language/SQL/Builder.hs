@@ -205,10 +205,10 @@ flatten holeCode (Builder elements) =
             case elem of
                 Hole gen ->
                     ( index + 1
-                    , mappend (holeCode index gen) codes
+                    , mappend codes (holeCode index gen)
                     , gens Seq.|> gen )
 
                 Code code ->
                     ( index
-                    , mappend code codes
+                    , mappend codes code
                     , gens )
