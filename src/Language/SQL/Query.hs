@@ -7,8 +7,6 @@ module Language.SQL.Query (
 
 import Data.String
 
-import Language.SQL.Builder
-
 -- | PostgreSQL-style placeholders for which indices start at 1
 dollarSign :: IsString code => Word -> arr input output -> code
 dollarSign index _ = fromString ('$' : show (index + 1))
