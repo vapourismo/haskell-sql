@@ -167,16 +167,16 @@ flatten
     -> Builder code arr input output
     -> (code, [arr input output])
 flatten holeCode (Builder elements) =
-    (code, gens)
+    (code, toList gens)
     where
-        (_, code, gens) = foldr f (0, mempty, []) elements
+        (_, code, gens) = foldl' f (0, mempty, Seq.empty) elements
 
-        f elem (index, codes, gens) =
+        f (index, codes, gens) elem =
             case elem of
                 Hole gen ->
                     ( index + 1
                     , mappend (holeCode index gen) codes
-                    , gen : gens )
+                    , gens Seq.|> gen )
 
                 Code code ->
                     ( index
