@@ -6,6 +6,7 @@ module Language.SQL.Builder (
     Builder (..),
     hole,
     code,
+    combineHoles,
     mapHoles,
     mapCodes,
 
@@ -111,11 +112,9 @@ instance Category arr => Category (Builder code arr) where
 
     id = Builder (Seq.singleton (Hole id))
 
-    Builder lhs . Builder rhs =
-        Builder (join (fillHole <$> rhs))
-        where
-            fillHole (Hole gen)  = mapHole (. gen) <$> lhs
-            fillHole (Code code) = Seq.singleton (Code code)
+    {-# INLINE (.) #-}
+
+    (.) = combineHoles (.)
 
 instance Arrow arr => Arrow (Builder code arr) where
     {-# INLINE arr #-}
@@ -129,6 +128,25 @@ instance Arrow arr => Arrow (Builder code arr) where
     {-# INLINE second #-}
 
     second = mapHoles second
+
+instance ArrowZero arr => ArrowZero (Builder code arr) where
+    {-# INLINE zeroArrow #-}
+
+    zeroArrow = hole zeroArrow
+
+instance ArrowPlus arr => ArrowPlus (Builder code arr) where
+    {-# INLINE (<+>) #-}
+
+    (<+>) = combineHoles (<+>)
+
+instance ArrowChoice arr => ArrowChoice (Builder code arr) where
+    left = mapHoles left
+
+    right = mapHoles right
+
+    (+++) = combineHoles (+++)
+
+    (|||) = combineHoles (|||)
 
 instance IsString code => IsString (Builder code arr input output) where
     fromString str = code (fromString str)
@@ -144,6 +162,18 @@ hole gen = Builder (Seq.singleton (Hole gen))
 -- | Produce a 'Builder' that only consists of 'Code'.
 code :: code -> Builder code arr input output
 code code = Builder (Seq.singleton (Code code))
+
+-- | Combine the holes of two 'Builder's.
+combineHoles
+    :: (arr0 input0 output0 -> arr1 input1 output1 -> arr2 input2 output2)
+    -> Builder code arr0 input0 output0
+    -> Builder code arr1 input1 output1
+    -> Builder code arr2 input2 output2
+combineHoles morph (Builder lhs) (Builder rhs) =
+    Builder (join (fillHole <$> rhs))
+    where
+        fillHole (Hole gen)  = mapHole (`morph` gen) <$> lhs
+        fillHole (Code code) = Seq.singleton (Code code)
 
 {-# INLINE mapHoles #-}
 
