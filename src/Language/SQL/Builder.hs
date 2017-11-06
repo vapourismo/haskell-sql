@@ -1,9 +1,5 @@
 module Language.SQL.Builder (
-    Element (..),
-    mapHole,
-    mapCode,
-
-    Builder (..),
+    Builder,
     hole,
     code,
     combineHoles,
@@ -19,7 +15,6 @@ import           Control.Arrow
 import           Control.Category
 import           Control.Monad
 
-import           Data.Foldable
 import           Data.Profunctor
 import qualified Data.Sequence    as Seq
 import           Data.String
@@ -74,7 +69,7 @@ newtype Builder code arr input output =
 
 instance (Monoid code, Show code, IsString code) => Show (Builder code arr input output) where
     show builder =
-        show (fst (flatten (\ index _ -> fromString ('$' : show (index + 1))) builder))
+        show (flatten id (\ _ -> fromString "?") builder)
 
 instance Monoid (Builder code arr input output) where
     {-# INLINE mempty #-}
@@ -192,23 +187,13 @@ mapCodes trans (Builder elements) = Builder (mapCode trans <$> elements)
 
 -- | Flatten 'Builder'.
 flatten
-    :: Monoid code
-    => (Word -> arr input output -> code)
+    :: Monoid m
+    => (code -> m)
+    -> (arr input output -> m)
     -> Builder code arr input output
-    -> (code, [arr input output])
-flatten holeCode (Builder elements) =
-    (code, toList gens)
+    -> m
+flatten fromCode fromHole (Builder elements) =
+    foldMap from elements
     where
-        (_, code, gens) = foldl' f (0, mempty, Seq.empty) elements
-
-        f (index, codes, gens) elem =
-            case elem of
-                Hole gen ->
-                    ( index + 1
-                    , mappend codes (holeCode index gen)
-                    , gens Seq.|> gen )
-
-                Code code ->
-                    ( index
-                    , mappend codes code
-                    , gens )
+        from (Code code) = fromCode code
+        from (Hole hole) = fromHole hole
