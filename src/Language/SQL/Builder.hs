@@ -20,17 +20,17 @@ import qualified Data.Sequence    as Seq
 import           Data.String
 
 -- | Builder element
-data Element code arr input output
-    = Hole (arr input output)
+data Element code cat input output
+    = Hole (cat input output)
     | Code code
 
-instance Functor (arr input) => Functor (Element code arr input) where
+instance Functor (cat input) => Functor (Element code cat input) where
     {-# INLINE fmap #-}
 
     fmap mapOutput (Hole gen)  = Hole (mapOutput <$> gen)
     fmap _         (Code code) = Code code
 
-instance Profunctor arr => Profunctor (Element code arr) where
+instance Profunctor cat => Profunctor (Element code cat) where
     {-# INLINE dimap #-}
 
     dimap mapInput mapOutput (Hole gen)  = Hole (dimap mapInput mapOutput gen)
@@ -50,28 +50,28 @@ instance Profunctor arr => Profunctor (Element code arr) where
 
 -- | Transform the 'Hole', if it is one.
 mapHole
-    :: (arr input output -> arr' input' output')
-    -> Element code arr  input  output
-    -> Element code arr' input' output'
+    :: (cat input output -> cat' input' output')
+    -> Element code cat  input  output
+    -> Element code cat' input' output'
 mapHole trans (Hole gen)  = Hole (trans gen)
 mapHole _     (Code code) = Code code
 
 {-# INLINE mapCode #-}
 
 -- | Transform the 'Code', if it is one.
-mapCode :: (code -> code') -> Element code arr input output -> Element code' arr input output
+mapCode :: (code -> code') -> Element code cat input output -> Element code' cat input output
 mapCode _     (Hole hole) = Hole hole
 mapCode trans (Code code) = Code (trans code)
 
 -- | Builder
-newtype Builder code arr input output =
-    Builder { unBuilder :: Seq.Seq (Element code arr input output) }
+newtype Builder code cat input output =
+    Builder { unBuilder :: Seq.Seq (Element code cat input output) }
 
-instance (Monoid code, Show code, IsString code) => Show (Builder code arr input output) where
+instance (Monoid code, Show code, IsString code) => Show (Builder code cat input output) where
     show builder =
         show (flatten id (\ _ -> fromString "?") builder)
 
-instance Monoid (Builder code arr input output) where
+instance Monoid (Builder code cat input output) where
     {-# INLINE mempty #-}
 
     mempty = Builder Seq.empty
@@ -84,12 +84,12 @@ instance Monoid (Builder code arr input output) where
 
     mconcat builders = Builder (mconcat (unBuilder <$> builders))
 
-instance Functor (arr input) => Functor (Builder code arr input) where
+instance Functor (cat input) => Functor (Builder code cat input) where
     {-# INLINE fmap #-}
 
     fmap mapOutput (Builder elements) = Builder (fmap mapOutput <$> elements)
 
-instance Profunctor arr => Profunctor (Builder code arr) where
+instance Profunctor cat => Profunctor (Builder code cat) where
     {-# INLINE dimap #-}
 
     dimap mapInput mapOutput (Builder elements) = Builder (dimap mapInput mapOutput <$> elements)
@@ -102,7 +102,7 @@ instance Profunctor arr => Profunctor (Builder code arr) where
 
     rmap mapOutput (Builder elements) = Builder (rmap mapOutput <$> elements)
 
-instance Category arr => Category (Builder code arr) where
+instance Category cat => Category (Builder code cat) where
     {-# INLINE id #-}
 
     id = Builder (Seq.singleton (Hole id))
@@ -111,7 +111,7 @@ instance Category arr => Category (Builder code arr) where
 
     (.) = combineHoles (.)
 
-instance Arrow arr => Arrow (Builder code arr) where
+instance Arrow cat => Arrow (Builder code cat) where
     {-# INLINE arr #-}
 
     arr f = hole (arr f)
@@ -124,17 +124,17 @@ instance Arrow arr => Arrow (Builder code arr) where
 
     second = mapHoles second
 
-instance ArrowZero arr => ArrowZero (Builder code arr) where
+instance ArrowZero cat => ArrowZero (Builder code cat) where
     {-# INLINE zeroArrow #-}
 
     zeroArrow = hole zeroArrow
 
-instance ArrowPlus arr => ArrowPlus (Builder code arr) where
+instance ArrowPlus cat => ArrowPlus (Builder code cat) where
     {-# INLINE (<+>) #-}
 
     (<+>) = combineHoles (<+>)
 
-instance ArrowChoice arr => ArrowChoice (Builder code arr) where
+instance ArrowChoice cat => ArrowChoice (Builder code cat) where
     left = mapHoles left
 
     right = mapHoles right
@@ -143,19 +143,19 @@ instance ArrowChoice arr => ArrowChoice (Builder code arr) where
 
     (|||) = combineHoles (|||)
 
-instance IsString code => IsString (Builder code arr input output) where
+instance IsString code => IsString (Builder code cat input output) where
     fromString str = code (fromString str)
 
 {-# INLINE hole #-}
 
 -- | Produce a 'Builder' that only consists of a 'Hole'.
-hole :: arr input output -> Builder code arr input output
+hole :: cat input output -> Builder code cat input output
 hole gen = Builder (Seq.singleton (Hole gen))
 
 {-# INLINE code #-}
 
 -- | Produce a 'Builder' that only consists of 'Code'.
-code :: code -> Builder code arr input output
+code :: code -> Builder code cat input output
 code code = Builder (Seq.singleton (Code code))
 
 -- | Combine the holes of two 'Builder's.
@@ -174,23 +174,23 @@ combineHoles morph (Builder lhs) (Builder rhs) =
 
 -- | Map all the 'Hole's inside the 'Builder'.
 mapHoles
-    :: (arr input output -> arr' input' output')
-    -> Builder code arr  input  output
-    -> Builder code arr' input' output'
+    :: (cat input output -> cat' input' output')
+    -> Builder code cat  input  output
+    -> Builder code cat' input' output'
 mapHoles trans (Builder elements) = Builder (mapHole trans <$> elements)
 
 {-# INLINE mapCodes #-}
 
 -- | Map all the 'Code's inside the 'Builder'.
-mapCodes :: (code -> code') -> Builder code arr input output -> Builder code' arr input output
+mapCodes :: (code -> code') -> Builder code cat input output -> Builder code' cat input output
 mapCodes trans (Builder elements) = Builder (mapCode trans <$> elements)
 
 -- | Flatten 'Builder'.
 flatten
     :: Monoid m
     => (code -> m)
-    -> (arr input output -> m)
-    -> Builder code arr input output
+    -> (cat input output -> m)
+    -> Builder code cat input output
     -> m
 flatten fromCode fromHole (Builder elements) =
     foldMap from elements
