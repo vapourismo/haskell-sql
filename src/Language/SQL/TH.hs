@@ -29,7 +29,7 @@ liftString str =
 -- | Generate a 'Code' expression.
 toCodeExp :: String -> Parser Exp
 toCodeExp strCode =
-    AppE (VarE 'code) <$> lift (liftString strCode)
+    lift (liftString strCode)
 
 -- | Something in parentheses
 inParentheses :: Parser String
@@ -93,20 +93,24 @@ inlineName = do
 -- | Parser for SQL code
 sqlCode :: Parser Exp
 sqlCode =
-    fmap (AppE (VarE 'mconcat) . ListE) $
-        many $ choice [ quotation '"' >>= toCodeExp
-                      , quotation '\'' >>= toCodeExp
-                      , try arrowCode
-                      , arrowName
-                      , try inlineCode
-                      , inlineName
-                      , some (noneOf "\"'#$") >>= toCodeExp ]
+    fmap (AppE (VarE 'mconcat) . ListE) $ many $
+        choice [ quotation '"' >>= toCodeExp
+               , quotation '\'' >>= toCodeExp
+               , try arrowCode
+               , arrowName
+               , try inlineCode
+               , inlineName
+               , some (noneOf "\"'#$") >>= toCodeExp ]
 
 -- | Parse SQL code and generate a 'SQL' expression from it.
 parseSqlCode :: String -> Q Exp
 parseSqlCode inputCode = do
-    result <- runParserT (sqlCode <* eof) () "quasi-quote"
-                         (dropWhileEnd isSpace (dropWhile isSpace inputCode))
+    result <-
+        runParserT
+            (sqlCode <* eof)
+            ()
+            "quasi-quote"
+            (dropWhileEnd isSpace (dropWhile isSpace inputCode))
     case result of
         Left parseError -> do
             Loc _ _ _ (lineStart, charStart) _ <- location
