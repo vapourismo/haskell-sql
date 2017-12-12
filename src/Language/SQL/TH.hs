@@ -21,7 +21,7 @@ import           Language.SQL.Builder
 
 type Parser = ParsecT String () Q
 
--- | Generate a 'B.ByteString' expression using the given 'String'.
+-- | Generate a @IsString a => a@ expression using the given 'String'.
 liftString :: String -> Q Exp
 liftString str =
     AppE (VarE 'fromString) <$> TH.lift str
